@@ -6,3 +6,6 @@ interface StateStore {
     fun writeAtomically(value: ByteArray)
     fun clear()
 }
+
+/** The stored byte sequence violates the adapter's bounded encrypted-envelope contract. */
+class StateStoreInvalidDataException(message: String, cause: Throwable? = null) : Exception(message, cause)

@@ -1,0 +1,375 @@
+package io.github.tuthan.steamoscompanion.core.client
+
+import io.github.tuthan.steamoscompanion.core.protocol.ApiRequest
+import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
+import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
+import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
+import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
+import io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException
+import io.github.tuthan.steamoscompanion.core.protocol.asString
+import java.security.MessageDigest
+import java.util.Base64
+
+object PersistentStateLimits {
+    const val MAX_PLAINTEXT_BYTES = 64 * 1024
+    const val MAX_ENVELOPE_BYTES = 65 * 1024
+    const val MAX_JOURNAL_ENTRIES = 32
+    const val MAX_OPERATION_BODY_BYTES = 4 * 1024
+    const val CURRENT_SCHEMA_VERSION = 1
+    const val ENVELOPE_FORMAT_VERSION = 1
+    const val STATE_KEY_ALIAS = "steamos-companion-android-state-v1"
+    const val STATE_AAD = "steamos-companion:android:state:v1"
+}
+
+class StateInvariantException(val code: StateInvariantCode, message: String) : IllegalArgumentException(message)
+
+enum class StateInvariantCode {
+    INVALID_FIELD,
+    INVALID_IDENTITY,
+    INVALID_CANDIDATE,
+    INVALID_JOURNAL,
+    HISTORY_FULL,
+    DUPLICATE_REQUEST_ID,
+    STALE_GENERATION,
+    NEWER_SCHEMA,
+}
+
+data class PersistentState(
+    val schemaVersion: Int = PersistentStateLimits.CURRENT_SCHEMA_VERSION,
+    val revision: Long = 0,
+    val pairingGeneration: Long = 0,
+    val activeHost: ActiveHost? = null,
+    val candidate: PairingCandidate? = null,
+    val journal: List<JournalEntry> = emptyList(),
+) {
+    fun validated(): PersistentState {
+        if (schemaVersion != PersistentStateLimits.CURRENT_SCHEMA_VERSION) invalid(StateInvariantCode.NEWER_SCHEMA, "Unsupported state schema")
+        if (revision < 0 || pairingGeneration < 0) invalid(StateInvariantCode.INVALID_FIELD, "Invalid state revision")
+        if (journal.size > PersistentStateLimits.MAX_JOURNAL_ENTRIES) invalid(StateInvariantCode.HISTORY_FULL, "Operation history is full")
+        activeHost?.validated()
+        candidate?.validated(pairingGeneration)
+        journal.forEach(JournalEntry::validated)
+
+        if (journal.map { it.localGeneration }.toSet().size != journal.size) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Duplicate local journal generation")
+        }
+        val duplicateRequest = journal.groupBy { Triple(it.hostId, it.clientId, it.requestId) }.values.any { it.size > 1 }
+        if (duplicateRequest) invalid(StateInvariantCode.INVALID_JOURNAL, "Duplicate journal request ID")
+
+        // Journal identities are historical and must survive re-pairing the same remote host
+        // with a different client ID. Each entry binds its own host/client/endpoint/pin tuple.
+        return this
+    }
+}
+
+data class ActiveHost(
+    val hostId: String,
+    val clientId: String,
+    val endpoint: String,
+    val certificatePin: String,
+    val bearerToken: String,
+    val grantedScopes: List<String>,
+    val wakeTarget: StoredWakeTarget,
+    val pairedAtMillis: Long,
+) {
+    fun validated(): ActiveHost {
+        requireText(hostId, "host ID", 128)
+        requireId(clientId, "client ID")
+        validateEndpoint(endpoint)
+        validatePin(certificatePin)
+        requireSecret(bearerToken, "bearer token", 512)
+        validateScopes(grantedScopes)
+        wakeTarget.validated()
+        if (pairedAtMillis < 0) invalid(StateInvariantCode.INVALID_FIELD, "Invalid paired timestamp")
+        return this
+    }
+}
+
+data class StoredWakeTarget(
+    val available: Boolean,
+    val mac: String?,
+    val interfaceName: String?,
+    val sourceAddress: String?,
+    val reason: String?,
+) {
+    fun validated(): StoredWakeTarget {
+        if (mac != null && (mac.length > 12 || !Regex("[0-9a-f]{0,12}").matches(mac))) {
+            invalid(StateInvariantCode.INVALID_FIELD, "Invalid wake MAC address")
+        }
+        interfaceName?.let { requireText(it, "wake interface", 32, allowEmpty = true) }
+        sourceAddress?.let { requireText(it, "wake source address", 64) }
+        reason?.let { requireText(it, "wake reason", 256) }
+        if (available && mac?.length != 12) invalid(StateInvariantCode.INVALID_FIELD, "Available wake target needs a MAC address")
+        return this
+    }
+}
+
+enum class PairingVariant(val wireValue: String) { VERIFICATION("verification"), LEGACY_CODE("legacy_code"), ADVANCED_PAYLOAD("advanced_payload") }
+enum class CandidatePhase(val wireValue: String) { READY("ready"), PENDING("pending"), APPROVED_STAGED("approved_staged") }
+
+data class PairingCandidate(
+    val generation: Long,
+    val variant: PairingVariant,
+    val clientId: String,
+    val clientName: String,
+    val requestedScopes: List<String>,
+    val endpoint: String,
+    val certificatePin: String,
+    val hostId: String?,
+    val createdAtMillis: Long,
+    val expiresAtMillis: Long?,
+    val phase: CandidatePhase,
+    val verificationNonce: String? = null,
+    val legacyPairingCode: String? = null,
+    val payloadId: String? = null,
+    val payloadSecret: String? = null,
+    val pairingId: String? = null,
+    val pairingSession: String? = null,
+    val stagedCredential: StagedCredential? = null,
+) {
+    fun validated(currentGeneration: Long): PairingCandidate {
+        if (generation <= 0 || generation != currentGeneration) invalid(StateInvariantCode.INVALID_CANDIDATE, "Candidate generation is stale")
+        requireId(clientId, "client ID")
+        requireText(clientName, "client name", 128)
+        validateScopes(requestedScopes)
+        validateEndpoint(endpoint)
+        validatePin(certificatePin)
+        hostId?.let { requireText(it, "host ID", 128) }
+        if (createdAtMillis < 0 || expiresAtMillis?.let { it < createdAtMillis } == true) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid candidate timestamps")
+        }
+        when (variant) {
+            PairingVariant.VERIFICATION -> {
+                if (verificationNonce?.let { Regex("[A-Za-z0-9_-]{22}").matches(it) } != true ||
+                    legacyPairingCode != null || payloadId != null || payloadSecret != null
+                ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid verification candidate")
+            }
+            PairingVariant.LEGACY_CODE -> {
+                if (legacyPairingCode?.let { Regex("[0-9]{4}-[0-9]{4}").matches(it) } != true ||
+                    verificationNonce != null || payloadId != null || payloadSecret != null
+                ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid legacy pairing candidate")
+            }
+            PairingVariant.ADVANCED_PAYLOAD -> {
+                if (payloadId?.let(::isSafeId) != true || payloadSecret?.let { it.length in 1..512 && isSafeSecret(it) } != true ||
+                    verificationNonce != null || legacyPairingCode != null
+                ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid advanced candidate")
+            }
+        }
+        pairingId?.let { requireId(it, "pairing ID") }
+        pairingSession?.let { requireId(it, "pairing session", 256) }
+        stagedCredential?.validated(clientId, hostId)
+        if ((phase == CandidatePhase.APPROVED_STAGED) != (stagedCredential != null)) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Staged credential and candidate phase disagree")
+        }
+        if (phase != CandidatePhase.READY && pairingId == null) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Claimed candidate is missing its host pairing ID")
+        }
+        return this
+    }
+}
+
+data class StagedCredential(
+    val clientId: String,
+    val hostId: String,
+    val bearerToken: String,
+    val grantedScopes: List<String>,
+    val wakeTarget: StoredWakeTarget,
+    val pairedAtMillis: Long,
+) {
+    fun validated(expectedClientId: String, expectedHostId: String?): StagedCredential {
+        if (clientId != expectedClientId || expectedHostId != null && hostId != expectedHostId) {
+            invalid(StateInvariantCode.INVALID_IDENTITY, "Staged credential identity mismatch")
+        }
+        requireText(hostId, "host ID", 128)
+        requireSecret(bearerToken, "bearer token", 512)
+        validateScopes(grantedScopes)
+        wakeTarget.validated()
+        if (pairedAtMillis < 0) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid staged timestamp")
+        return this
+    }
+}
+
+enum class JournalPhase(val wireValue: String, val unresolved: Boolean) {
+    PREPARED("prepared", true),
+    ACCEPTED("accepted", true),
+    DISPATCHED("dispatched", true),
+    OBSERVED_RETURN("observed_return", true),
+    UNKNOWN("unknown", true),
+    SUCCEEDED("succeeded", false),
+    FAILED("failed", false),
+}
+
+data class JournalEntry(
+    val localGeneration: Long,
+    val hostId: String,
+    val clientId: String,
+    val originalEndpoint: String,
+    val originalCertificatePin: String,
+    val method: String,
+    val path: String,
+    val requestId: String,
+    val bodyBase64: String,
+    val bodySha256: String,
+    val phase: JournalPhase,
+    val operationId: String?,
+    val hostBootId: String?,
+    val createdAtMillis: Long,
+    val updatedAtMillis: Long,
+    val resultSummary: String?,
+    val acknowledged: Boolean,
+) {
+    fun bodyBytes(): ByteArray = try {
+        Base64.getDecoder().decode(bodyBase64)
+    } catch (error: IllegalArgumentException) {
+        throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Stored request body is not valid base64")
+    }
+
+    fun validated(): JournalEntry {
+        if (localGeneration <= 0) invalid(StateInvariantCode.INVALID_JOURNAL, "Invalid local journal generation")
+        requireText(hostId, "host ID", 128)
+        requireId(clientId, "client ID")
+        validateEndpoint(originalEndpoint)
+        validatePin(originalCertificatePin)
+        if (method != HttpMethod.POST.wireValue) invalid(StateInvariantCode.INVALID_JOURNAL, "Only POST mutations are journaled")
+        requireId(requestId, "request ID")
+        val route = try {
+            ApiRoute.match(HttpMethod.POST, path).route
+        } catch (_: Exception) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal route is invalid")
+        }
+        if (route !in JOURNALED_ROUTES) invalid(StateInvariantCode.INVALID_JOURNAL, "Route is not journaled")
+        val bytes = bodyBytes()
+        if (bytes.isEmpty() || bytes.size > PersistentStateLimits.MAX_OPERATION_BODY_BYTES) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal request body exceeds its limit")
+        }
+        if (Base64.getEncoder().encodeToString(bytes) != bodyBase64 || !digestMatches(bytes, bodySha256)) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal request digest does not match its bytes")
+        }
+        val requestBody = try {
+            BoundedJson.parseObject(bytes)
+        } catch (_: JsonFormatException) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal request body is not valid JSON")
+        }
+        if (requestBody["request_id"].asString("request_id") != requestId) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal request ID does not match its body")
+        }
+        try {
+            ApiRequest(HttpMethod.POST, path, requestBody, bearerToken = "journal-validation-token").validate()
+        } catch (_: Exception) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal request does not match the pinned route schema")
+        }
+        operationId?.let { if (!isSafeId(it)) invalid(StateInvariantCode.INVALID_JOURNAL, "Operation ID is invalid") }
+        hostBootId?.let { requireText(it, "host boot ID", 128) }
+        if (createdAtMillis < 0 || updatedAtMillis < createdAtMillis) invalid(StateInvariantCode.INVALID_JOURNAL, "Journal timestamps are invalid")
+        resultSummary?.let { requireText(it, "result summary", 1024, allowEmpty = true) }
+        if (phase in setOf(JournalPhase.ACCEPTED, JournalPhase.DISPATCHED, JournalPhase.OBSERVED_RETURN, JournalPhase.SUCCEEDED) && operationId == null) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Journal phase needs an operation ID")
+        }
+        if (phase == JournalPhase.PREPARED && operationId != null) invalid(StateInvariantCode.INVALID_JOURNAL, "Prepared entry cannot have an operation ID")
+        return this
+    }
+
+    companion object {
+        private val JOURNALED_ROUTES = setOf(
+            ApiRoute.PAIR_REVOKE_SELF,
+            ApiRoute.POWER,
+            ApiRoute.DISPLAY_ORDER_SET,
+            ApiRoute.DISPLAY_ORDER_AUTOMATIC,
+            ApiRoute.DISPLAY_PREVIEW,
+            ApiRoute.DISPLAY_CONFIRM,
+            ApiRoute.DISPLAY_RESTORE,
+            ApiRoute.DISPLAY_SAVE_CURRENT,
+            ApiRoute.SUNSHINE_RESTART,
+        )
+
+        fun create(
+            localGeneration: Long,
+            host: ActiveHost,
+            request: ApiRequest,
+            exactBodyBytes: ByteArray,
+            nowMillis: Long,
+        ): JournalEntry {
+            val matched = request.validate()
+            if (request.method != HttpMethod.POST || matched.route !in JOURNALED_ROUTES) {
+                invalid(StateInvariantCode.INVALID_JOURNAL, "Request is not a journaled mutation")
+            }
+            if (request.bearerToken != host.bearerToken) invalid(StateInvariantCode.INVALID_IDENTITY, "Mutation credential does not match active host")
+            if (exactBodyBytes.isEmpty() || exactBodyBytes.size > PersistentStateLimits.MAX_OPERATION_BODY_BYTES) {
+                invalid(StateInvariantCode.INVALID_JOURNAL, "Mutation body exceeds the journal limit")
+            }
+            val encodedBody = request.body?.let(BoundedJson::encode)
+            if (encodedBody == null || !encodedBody.contentEquals(exactBodyBytes)) {
+                invalid(StateInvariantCode.INVALID_JOURNAL, "Serialized request bytes do not match the validated request")
+            }
+            val requestId = try {
+                request.body.fields["request_id"].asString("request_id")
+            } catch (_: Exception) {
+                invalid(StateInvariantCode.INVALID_JOURNAL, "Mutation request ID is missing")
+            }
+            return JournalEntry(
+                localGeneration = localGeneration,
+                hostId = host.hostId,
+                clientId = host.clientId,
+                originalEndpoint = host.endpoint,
+                originalCertificatePin = host.certificatePin,
+                method = HttpMethod.POST.wireValue,
+                path = request.path,
+                requestId = requestId,
+                bodyBase64 = Base64.getEncoder().encodeToString(exactBodyBytes),
+                bodySha256 = sha256Hex(exactBodyBytes),
+                phase = JournalPhase.PREPARED,
+                operationId = null,
+                hostBootId = null,
+                createdAtMillis = nowMillis,
+                updatedAtMillis = nowMillis,
+                resultSummary = null,
+                acknowledged = false,
+            ).validated()
+        }
+    }
+}
+
+private fun validateEndpoint(value: String) {
+    try {
+        HostEndpoint.parse(value)
+    } catch (_: Exception) {
+        invalid(StateInvariantCode.INVALID_FIELD, "Invalid host endpoint")
+    }
+}
+
+private fun validatePin(value: String) {
+    if (!Regex("sha256:[0-9a-f]{64}").matches(value)) invalid(StateInvariantCode.INVALID_FIELD, "Invalid certificate pin")
+}
+
+private fun validateScopes(values: List<String>) {
+    val allowed = setOf("status.read", "power.control", "display.control")
+    if (values.isEmpty() || values.size > allowed.size || values.distinct().size != values.size || values.any { it !in allowed }) {
+        invalid(StateInvariantCode.INVALID_FIELD, "Invalid granted scopes")
+    }
+}
+
+private fun requireId(value: String, label: String, max: Int = 128) {
+    if (value.length > max || !isSafeId(value)) invalid(StateInvariantCode.INVALID_FIELD, "Invalid $label")
+}
+
+private fun isSafeId(value: String): Boolean = Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}").matches(value)
+
+private fun requireSecret(value: String, label: String, max: Int) {
+    if (value.isEmpty() || value.length > max || !isSafeSecret(value)) invalid(StateInvariantCode.INVALID_FIELD, "Invalid $label")
+}
+
+private fun isSafeSecret(value: String): Boolean = value.none { it == '\r' || it == '\n' || it == '\u0000' || it.code < 0x20 || it.code == 0x7f }
+
+private fun requireText(value: String, label: String, max: Int, allowEmpty: Boolean = false) {
+    if ((!allowEmpty && value.isEmpty()) || value.length > max || !isSafeSecret(value)) invalid(StateInvariantCode.INVALID_FIELD, "Invalid $label")
+}
+
+private fun invalid(code: StateInvariantCode, message: String): Nothing = throw StateInvariantException(code, message)
+
+private fun sha256Hex(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+private fun digestMatches(bytes: ByteArray, expected: String): Boolean {
+    if (!Regex("[0-9a-f]{64}").matches(expected)) return false
+    val actual = sha256Hex(bytes).toByteArray(Charsets.US_ASCII)
+    return MessageDigest.isEqual(actual, expected.toByteArray(Charsets.US_ASCII))
+}
