@@ -1,7 +1,7 @@
-# :core
+# `:core`
 
 Kotlin/JVM only. `verifyCoreBoundary` (part of `check`) fails the build on any `android`, `androidx`, or `com.android` import, and the build script rejects project dependencies.
 
-Keep protocol models and validation, closed route definitions, pairing state, bounded transport policies, discovery selection, Wake packet construction, and reconciliation decisions here. Depend on injected ports for clocks, state storage, sockets (TCP and UDP), and network binding so the core runs without Android.
+The module owns validated protocol models and closed routes, pinned bounded TLS/HTTP transport, LAN discovery policies, both pairing state machines, encrypted-state transactions, the operation journal, and reconciliation decisions. Clock, persistence, sockets, and network binding come from injected ports so JVM tests can use deterministic fakes.
 
-Present: the `Clock`, `StateStore`, `SocketFactory`, `NetworkAccess`, and `CorePorts` constructor-injection boundary and its JVM smoke test. No production protocol or transport yet.
+Phase 03–05 coverage lives in `src/test`: contract fixtures, transport edge cases, IPv4 scan bounds/cancellation, scrypt vectors and exact pairing request bodies, pairing persistence/restart/cancel/error handling, and schema migration. Android framework code stays in `:app`.

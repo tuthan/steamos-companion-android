@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.LinkProperties
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.Ipv4Subnet
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import java.io.IOException
 import java.net.DatagramSocket
@@ -83,6 +84,11 @@ class AndroidNetworkAccess(context: Context) : NetworkAccess {
             interfaceName = interfaceName,
             addresses = addresses,
             broadcastAddresses = broadcasts,
+            ipv4Subnets = linkAddresses.mapNotNull { link ->
+                val address = link.address as? Inet4Address ?: return@mapNotNull null
+                if (address.isLoopbackAddress || address.isAnyLocalAddress || address.isMulticastAddress) return@mapNotNull null
+                Ipv4Subnet(address, link.prefixLength)
+            },
         )
     }
 

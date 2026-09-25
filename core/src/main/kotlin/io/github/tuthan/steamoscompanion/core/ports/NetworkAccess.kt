@@ -12,7 +12,11 @@ data class LanPath(
     val interfaceName: String?,
     val addresses: List<InetAddress>,
     val broadcastAddresses: List<InetAddress>,
+    val ipv4Subnets: List<Ipv4Subnet> = emptyList(),
 )
+
+/** An IPv4 link address and prefix as reported by the selected LAN interface. */
+data class Ipv4Subnet(val address: InetAddress, val prefixLength: Int)
 
 /**
  * The app adapter maps path IDs to platform networks and binds sockets when requested.

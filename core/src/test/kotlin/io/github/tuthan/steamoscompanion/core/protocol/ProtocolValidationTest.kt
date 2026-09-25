@@ -64,6 +64,35 @@ class ProtocolValidationTest {
         assertThrows(RequestValidationException::class.java) {
             ApiRequest(HttpMethod.POST, "/v1/pair/request", emptyObject(), bearerToken = "fixture-token").validate()
         }
+        val payload = jsonObject(
+            "pairing_id" to "pair-1".asJson(),
+            "secret" to "s".repeat(256).asJson(),
+            "client_id" to "client-1".asJson(),
+            "client_name" to "Android Companion".asJson(),
+            "scopes" to JsonValue.ArrayValue(listOf("status.read".asJson())),
+        )
+        ApiRequest(HttpMethod.POST, "/v1/pair/request", payload).validate()
+        val oversizedSecret = JsonValue.ObjectValue(payload.fields + ("secret" to "s".repeat(257).asJson()))
+        assertThrows(RequestValidationException::class.java) {
+            ApiRequest(HttpMethod.POST, "/v1/pair/request", oversizedSecret).validate()
+        }
+        val invalidSession = JsonValue.ObjectValue(payload.fields + ("pairing_session" to "short".asJson()))
+        assertThrows(RequestValidationException::class.java) {
+            ApiRequest(HttpMethod.POST, "/v1/pair/request", invalidSession).validate()
+        }
+        val malformedReply = jsonObject(
+            "protocol_version" to 1L.asJson(),
+            "state" to "pending".asJson(),
+            "pairing_id" to "pair-1".asJson(),
+            "expires_at" to 1_790_000_060L.asJson(),
+            "pairing_session" to "short".asJson(),
+        )
+        assertThrows(JsonFormatException::class.java) {
+            ProtocolCodec.decodeResponse(
+                ApiRoute.PAIR_REQUEST,
+                HttpResponse(200, emptyMap(), BoundedJson.encode(malformedReply)),
+            )
+        }
     }
 
     @Test

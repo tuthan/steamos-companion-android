@@ -15,7 +15,7 @@ object PersistentStateLimits {
     const val MAX_ENVELOPE_BYTES = 65 * 1024
     const val MAX_JOURNAL_ENTRIES = 32
     const val MAX_OPERATION_BODY_BYTES = 4 * 1024
-    const val CURRENT_SCHEMA_VERSION = 1
+    const val CURRENT_SCHEMA_VERSION = 2
     const val ENVELOPE_FORMAT_VERSION = 1
     const val STATE_KEY_ALIAS = "steamos-companion-android-state-v1"
     const val STATE_AAD = "steamos-companion:android:state:v1"
@@ -105,7 +105,19 @@ data class StoredWakeTarget(
 }
 
 enum class PairingVariant(val wireValue: String) { VERIFICATION("verification"), LEGACY_CODE("legacy_code"), ADVANCED_PAYLOAD("advanced_payload") }
-enum class CandidatePhase(val wireValue: String) { READY("ready"), PENDING("pending"), APPROVED_STAGED("approved_staged") }
+enum class CandidatePhase(val wireValue: String) {
+    READY("ready"),
+    REQUESTING("requesting"),
+    REQUEST_UNCONFIRMED("request_unconfirmed"),
+    PENDING("pending"),
+    RATE_LIMITED("rate_limited"),
+    REJECTED("rejected"),
+    EXPIRED("expired"),
+    IDENTITY_CHANGED("identity_changed"),
+    CREDENTIAL_UNCONFIRMED("credential_unconfirmed"),
+    CANCELLED("cancelled"),
+    APPROVED_STAGED("approved_staged"),
+}
 
 data class PairingCandidate(
     val generation: Long,
@@ -120,17 +132,24 @@ data class PairingCandidate(
     val expiresAtMillis: Long?,
     val phase: CandidatePhase,
     val verificationNonce: String? = null,
+    val verificationCode: String? = null,
     val legacyPairingCode: String? = null,
     val payloadId: String? = null,
     val payloadSecret: String? = null,
     val pairingId: String? = null,
     val pairingSession: String? = null,
     val stagedCredential: StagedCredential? = null,
+    val networkId: String? = null,
+    val requestStartedAtMillis: Long? = null,
+    val localExpiresAtMillis: Long? = null,
+    val hostExpiresAtMillis: Long? = null,
+    val payloadExpiresAtMillis: Long? = null,
+    val pollNotBeforeMillis: Long? = null,
 ) {
     fun validated(currentGeneration: Long): PairingCandidate {
         if (generation <= 0 || generation != currentGeneration) invalid(StateInvariantCode.INVALID_CANDIDATE, "Candidate generation is stale")
         requireId(clientId, "client ID")
-        requireText(clientName, "client name", 128)
+        requireText(clientName, "client name", 96)
         validateScopes(requestedScopes)
         validateEndpoint(endpoint)
         validatePin(certificatePin)
@@ -138,31 +157,87 @@ data class PairingCandidate(
         if (createdAtMillis < 0 || expiresAtMillis?.let { it < createdAtMillis } == true) {
             invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid candidate timestamps")
         }
+        networkId?.let { requireText(it, "network ID", 128) }
+        val timestamps = listOfNotNull(
+            requestStartedAtMillis,
+            localExpiresAtMillis,
+            hostExpiresAtMillis,
+            payloadExpiresAtMillis,
+            pollNotBeforeMillis,
+        )
+        if (timestamps.any { it < 0 } || requestStartedAtMillis?.let { it < createdAtMillis } == true) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid pairing deadline")
+        }
+        val deadlines = listOfNotNull(localExpiresAtMillis, hostExpiresAtMillis, payloadExpiresAtMillis)
+        if (expiresAtMillis != null && deadlines.isNotEmpty() && expiresAtMillis > deadlines.min()) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Effective expiry exceeds a pairing deadline")
+        }
         when (variant) {
             PairingVariant.VERIFICATION -> {
-                if (verificationNonce?.let { Regex("[A-Za-z0-9_-]{22}").matches(it) } != true ||
+                val requestMayNeedNonce = phase in setOf(
+                    CandidatePhase.READY,
+                    CandidatePhase.REQUESTING,
+                    CandidatePhase.REQUEST_UNCONFIRMED,
+                    CandidatePhase.PENDING,
+                    CandidatePhase.RATE_LIMITED,
+                )
+                if ((requestMayNeedNonce && verificationNonce?.let { Regex("[A-Za-z0-9_-]{22}").matches(it) } != true) ||
                     legacyPairingCode != null || payloadId != null || payloadSecret != null
                 ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid verification candidate")
+                if (verificationCode != null && !Regex("[0-9]{8}").matches(verificationCode)) {
+                    invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid verification code")
+                }
+                if (requestMayNeedNonce && requestStartedAtMillis != null && verificationCode == null) {
+                    invalid(StateInvariantCode.INVALID_CANDIDATE, "Pairing code is missing")
+                }
             }
             PairingVariant.LEGACY_CODE -> {
-                if (legacyPairingCode?.let { Regex("[0-9]{4}-[0-9]{4}").matches(it) } != true ||
-                    verificationNonce != null || payloadId != null || payloadSecret != null
+                val requestMayNeedCode = phase in setOf(
+                    CandidatePhase.READY,
+                    CandidatePhase.REQUESTING,
+                    CandidatePhase.REQUEST_UNCONFIRMED,
+                    CandidatePhase.PENDING,
+                    CandidatePhase.RATE_LIMITED,
+                )
+                if ((requestMayNeedCode && legacyPairingCode?.let { Regex("[0-9]{4}-[0-9]{4}").matches(it) } != true) ||
+                    verificationNonce != null || verificationCode != null || payloadId != null || payloadSecret != null
                 ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid legacy pairing candidate")
             }
             PairingVariant.ADVANCED_PAYLOAD -> {
-                if (payloadId?.let(::isSafeId) != true || payloadSecret?.let { it.length in 1..512 && isSafeSecret(it) } != true ||
-                    verificationNonce != null || legacyPairingCode != null
+                val requestMayNeedPayload = phase in setOf(
+                    CandidatePhase.READY,
+                    CandidatePhase.REQUESTING,
+                    CandidatePhase.REQUEST_UNCONFIRMED,
+                    CandidatePhase.PENDING,
+                    CandidatePhase.RATE_LIMITED,
+                )
+                if (payloadId?.let(::isSafeId) != true ||
+                    (requestMayNeedPayload && payloadSecret?.let { it.length in 16..256 && isSafeSecret(it) } != true) ||
+                    verificationNonce != null || verificationCode != null || legacyPairingCode != null ||
+                    (pairingId != null && pairingId != payloadId)
                 ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid advanced candidate")
             }
         }
         pairingId?.let { requireId(it, "pairing ID") }
-        pairingSession?.let { requireId(it, "pairing session", 256) }
+        pairingSession?.let {
+            if (!Regex("[A-Za-z0-9_-]{16,256}").matches(it)) {
+                invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid pairing session")
+            }
+        }
+        if (phase in setOf(CandidatePhase.PENDING, CandidatePhase.RATE_LIMITED, CandidatePhase.APPROVED_STAGED) && pairingId == null) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Pending candidate is missing its host pairing ID")
+        }
+        if (phase in setOf(CandidatePhase.PENDING, CandidatePhase.RATE_LIMITED) &&
+            requestStartedAtMillis != null && pairingSession == null
+        ) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Pending candidate is missing its pairing session")
+        }
+        if (phase == CandidatePhase.RATE_LIMITED && pollNotBeforeMillis == null) {
+            invalid(StateInvariantCode.INVALID_CANDIDATE, "Rate-limited pairing is missing its retry deadline")
+        }
         stagedCredential?.validated(clientId, hostId)
         if ((phase == CandidatePhase.APPROVED_STAGED) != (stagedCredential != null)) {
             invalid(StateInvariantCode.INVALID_CANDIDATE, "Staged credential and candidate phase disagree")
-        }
-        if (phase != CandidatePhase.READY && pairingId == null) {
-            invalid(StateInvariantCode.INVALID_CANDIDATE, "Claimed candidate is missing its host pairing ID")
         }
         return this
     }

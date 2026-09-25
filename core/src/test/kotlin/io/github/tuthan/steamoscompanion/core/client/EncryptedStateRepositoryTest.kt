@@ -93,7 +93,7 @@ class EncryptedStateRepositoryTest {
         assertEquals(9L, migrated.state.revision)
         assertNotEquals(oldBytes.toList(), store.rawBytes()!!.toList())
 
-        val newer = jsonObject("schema_version" to JsonValue.NumberValue("2"), "future" to JsonValue.StringValue("retain"))
+        val newer = jsonObject("schema_version" to JsonValue.NumberValue("3"), "future" to JsonValue.StringValue("retain"))
         FakePreparedEnvelope(cipher, store, io.github.tuthan.steamoscompanion.core.protocol.BoundedJson.encode(newer))
         val newerBytes = store.rawBytes()!!
         assertEquals(StateLoadResult.Unavailable(StateUnavailableReason.APP_UPDATE_REQUIRED), repository.load())

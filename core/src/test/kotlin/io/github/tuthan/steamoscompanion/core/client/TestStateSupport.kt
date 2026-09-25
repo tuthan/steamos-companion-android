@@ -22,6 +22,8 @@ import javax.crypto.spec.SecretKeySpec
 internal class MemoryStateStore : StateStore {
     private var bytes: ByteArray? = null
     var failNextWrite = false
+    var failOnWriteNumber: Int? = null
+    var writeCount = 0
     var failClear = false
     var invalidData = false
 
@@ -31,8 +33,10 @@ internal class MemoryStateStore : StateStore {
     }
 
     @Synchronized override fun writeAtomically(value: ByteArray) {
-        if (failNextWrite) {
+        writeCount++
+        if (failNextWrite || writeCount == failOnWriteNumber) {
             failNextWrite = false
+            failOnWriteNumber = null
             throw java.io.IOException("simulated disk full")
         }
         bytes = value.copyOf()

@@ -39,11 +39,11 @@ object PersistentStateCodec {
 
     fun decodeCurrent(document: JsonValue.ObjectValue): PersistentState {
         if (schemaVersion(document) != PersistentStateLimits.CURRENT_SCHEMA_VERSION.toLong()) {
-            throw JsonFormatException("State schema is not version 1")
+            throw JsonFormatException("State schema is not version ${PersistentStateLimits.CURRENT_SCHEMA_VERSION}")
         }
         document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
         val state = PersistentState(
-            schemaVersion = 1,
+            schemaVersion = PersistentStateLimits.CURRENT_SCHEMA_VERSION,
             revision = document["revision"].asLong("revision"),
             pairingGeneration = document["pairing_generation"].asLong("pairing_generation"),
             activeHost = document["active_host"].nullableObject("active_host")?.decodeActiveHost(),
@@ -57,24 +57,68 @@ object PersistentStateCodec {
         }
     }
 
-    /** The first shipped schema has no persisted predecessor; this empty v0 fixture tests the migration path. */
+    /** Migrate the empty pre-release v0 state and the storage-only v1 state to the pairing schema. */
     fun migrateKnownDocument(document: JsonValue.ObjectValue): JsonValue.ObjectValue? {
-        if (schemaVersion(document) != 0L) return null
-        document.exactKeys("schema_version", "revision", "active_host", "candidate", "journal")
-        if (document["active_host"] != JsonValue.NullValue || document["candidate"] != JsonValue.NullValue ||
-            document["journal"].asArray("journal").isNotEmpty()
-        ) {
-            throw JsonFormatException("Unknown data in legacy state schema")
+        return when (schemaVersion(document)) {
+            0L -> {
+                document.exactKeys("schema_version", "revision", "active_host", "candidate", "journal")
+                if (document["active_host"] != JsonValue.NullValue || document["candidate"] != JsonValue.NullValue ||
+                    document["journal"].asArray("journal").isNotEmpty()
+                ) {
+                    throw JsonFormatException("Unknown data in legacy state schema")
+                }
+                JsonValue.ObjectValue(
+                    linkedMapOf(
+                        "schema_version" to number(2),
+                        "revision" to document["revision"].asLong("revision").asJson(),
+                        "pairing_generation" to number(0),
+                        "active_host" to JsonValue.NullValue,
+                        "candidate" to JsonValue.NullValue,
+                        "journal" to JsonValue.ArrayValue(emptyList()),
+                    ),
+                )
+            }
+            1L -> {
+                document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
+                val candidate = document["candidate"].nullableObject("candidate")?.let(::migrateCandidateV1)
+                JsonValue.ObjectValue(
+                    linkedMapOf(
+                        "schema_version" to number(2),
+                        "revision" to document["revision"]!!,
+                        "pairing_generation" to document["pairing_generation"]!!,
+                        "active_host" to document["active_host"]!!,
+                        "candidate" to (candidate ?: JsonValue.NullValue),
+                        "journal" to document["journal"]!!,
+                    ),
+                )
+            }
+            else -> null
         }
+    }
+
+    private fun migrateCandidateV1(value: JsonValue.ObjectValue): JsonValue.ObjectValue {
+        value.exactKeys(
+            "generation", "variant", "client_id", "client_name", "requested_scopes", "endpoint", "certificate_pin", "host_id",
+            "created_at_ms", "expires_at_ms", "phase", "verification_nonce", "legacy_pairing_code", "payload_id", "payload_secret",
+            "pairing_id", "pairing_session", "staged_credential",
+        )
         return JsonValue.ObjectValue(
-            linkedMapOf(
-                "schema_version" to number(1),
-                "revision" to document["revision"].asLong("revision").asJson(),
-                "pairing_generation" to number(0),
-                "active_host" to JsonValue.NullValue,
-                "candidate" to JsonValue.NullValue,
-                "journal" to JsonValue.ArrayValue(emptyList()),
-            ),
+            LinkedHashMap(value.fields).apply {
+                put("verification_code", JsonValue.NullValue)
+                put("network_id", JsonValue.NullValue)
+                put("request_started_at_ms", JsonValue.NullValue)
+                put("local_expires_at_ms", JsonValue.NullValue)
+                put("host_expires_at_ms", JsonValue.NullValue)
+                // Schema v1 had one effective expiry. Treat it as the payload's expiry when
+                // migrating a payload candidate; this may shorten a window, but never extends it.
+                put(
+                    "payload_expires_at_ms",
+                    if (this["variant"] == string(PairingVariant.ADVANCED_PAYLOAD.wireValue)) {
+                        this["expires_at_ms"] ?: JsonValue.NullValue
+                    } else JsonValue.NullValue,
+                )
+                put("poll_not_before_ms", JsonValue.NullValue)
+            },
         )
     }
 
@@ -119,12 +163,19 @@ object PersistentStateCodec {
         "expires_at_ms" to (candidate.expiresAtMillis?.asJson() ?: JsonValue.NullValue),
         "phase" to string(candidate.phase.wireValue),
         "verification_nonce" to candidate.verificationNonce.asJsonOrNull(),
+        "verification_code" to candidate.verificationCode.asJsonOrNull(),
         "legacy_pairing_code" to candidate.legacyPairingCode.asJsonOrNull(),
         "payload_id" to candidate.payloadId.asJsonOrNull(),
         "payload_secret" to candidate.payloadSecret.asJsonOrNull(),
         "pairing_id" to candidate.pairingId.asJsonOrNull(),
         "pairing_session" to candidate.pairingSession.asJsonOrNull(),
         "staged_credential" to (candidate.stagedCredential?.let(::encodeStagedCredential) ?: JsonValue.NullValue),
+        "network_id" to candidate.networkId.asJsonOrNull(),
+        "request_started_at_ms" to (candidate.requestStartedAtMillis?.asJson() ?: JsonValue.NullValue),
+        "local_expires_at_ms" to (candidate.localExpiresAtMillis?.asJson() ?: JsonValue.NullValue),
+        "host_expires_at_ms" to (candidate.hostExpiresAtMillis?.asJson() ?: JsonValue.NullValue),
+        "payload_expires_at_ms" to (candidate.payloadExpiresAtMillis?.asJson() ?: JsonValue.NullValue),
+        "poll_not_before_ms" to (candidate.pollNotBeforeMillis?.asJson() ?: JsonValue.NullValue),
     )
 
     private fun encodeStagedCredential(credential: StagedCredential) = obj(
@@ -184,8 +235,9 @@ object PersistentStateCodec {
     private fun JsonValue.ObjectValue.decodeCandidate(): PairingCandidate {
         exactKeys(
             "generation", "variant", "client_id", "client_name", "requested_scopes", "endpoint", "certificate_pin", "host_id",
-            "created_at_ms", "expires_at_ms", "phase", "verification_nonce", "legacy_pairing_code", "payload_id", "payload_secret",
-            "pairing_id", "pairing_session", "staged_credential",
+            "created_at_ms", "expires_at_ms", "phase", "verification_nonce", "verification_code", "legacy_pairing_code", "payload_id", "payload_secret",
+            "pairing_id", "pairing_session", "staged_credential", "network_id", "request_started_at_ms", "local_expires_at_ms",
+            "host_expires_at_ms", "payload_expires_at_ms", "poll_not_before_ms",
         )
         val variant = PairingVariant.entries.firstOrNull { it.wireValue == this["variant"].asString("variant") }
             ?: throw JsonFormatException("Unknown candidate variant")
@@ -204,12 +256,19 @@ object PersistentStateCodec {
             expiresAtMillis = this["expires_at_ms"].nullableLong("expires_at_ms"),
             phase = phase,
             verificationNonce = this["verification_nonce"].nullableString("verification_nonce"),
+            verificationCode = this["verification_code"].nullableString("verification_code"),
             legacyPairingCode = this["legacy_pairing_code"].nullableString("legacy_pairing_code"),
             payloadId = this["payload_id"].nullableString("payload_id"),
             payloadSecret = this["payload_secret"].nullableString("payload_secret"),
             pairingId = this["pairing_id"].nullableString("pairing_id"),
             pairingSession = this["pairing_session"].nullableString("pairing_session"),
             stagedCredential = this["staged_credential"].nullableObject("staged_credential")?.decodeStagedCredential(),
+            networkId = this["network_id"].nullableString("network_id"),
+            requestStartedAtMillis = this["request_started_at_ms"].nullableLong("request_started_at_ms"),
+            localExpiresAtMillis = this["local_expires_at_ms"].nullableLong("local_expires_at_ms"),
+            hostExpiresAtMillis = this["host_expires_at_ms"].nullableLong("host_expires_at_ms"),
+            payloadExpiresAtMillis = this["payload_expires_at_ms"].nullableLong("payload_expires_at_ms"),
+            pollNotBeforeMillis = this["poll_not_before_ms"].nullableLong("poll_not_before_ms"),
         )
     }
 

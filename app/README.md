@@ -1,5 +1,5 @@
-# :app
+# `:app`
 
-The Android application module: manifest, platform permissions, Android Keystore-backed storage, network binding, lifecycle adapters, manual constructor wiring, ViewModels, and Compose destinations. It depends on `:core`; `:core` never depends on it.
+The Android application module: manifest and permission variants, Android Keystore and AtomicFile storage, clocks, LAN network selection/DNS/socket binding, and the instrumented pinned-TLS fake host. It depends on `:core`; `:core` never depends on it.
 
-Present: the manifest security baseline (no backup or device transfer, no cleartext, no user CAs), the `baseline`/`target37` flavors with a merged-manifest check per variant, managed-device definitions, and the instrumented fake host in `src/androidTest`. No screens or platform adapters yet.
+The `baseline` and `target37` flavors retain merged-manifest checks. Discovery and pairing are implemented as testable `:core` state machines. Production screens remain for Phase 06, and live onboarding wiring follows in Phase 07.

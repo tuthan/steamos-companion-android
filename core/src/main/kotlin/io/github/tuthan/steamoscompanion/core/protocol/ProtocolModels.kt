@@ -141,6 +141,7 @@ data class ApiRequest(
         private val ALLOWED_SCOPES = setOf("status.read", "power.control", "display.control")
         private val REQUEST_ID = Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
         private val SAFE_ID = Regex("[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
+        private val PAIRING_SESSION = Regex("[A-Za-z0-9_-]{16,256}")
         private val NONCE = Regex("[A-Za-z0-9_-]{22}")
 
         private fun validateBody(match: MatchedRoute, body: JsonValue.ObjectValue) {
@@ -176,6 +177,12 @@ data class ApiRequest(
             fun bool(name: String) {
                 if (fields[name] !is JsonValue.BooleanValue) throw RequestValidationException("'$name' must be boolean")
             }
+            fun pairingSession() {
+                val session = string("pairing_session", 256)
+                if (!PAIRING_SESSION.matches(session)) {
+                    throw RequestValidationException("Invalid pairing session")
+                }
+            }
 
             when (match.route) {
                 ApiRoute.PAIR_REQUEST -> {
@@ -195,7 +202,7 @@ data class ApiRequest(
                         payload -> {
                             exact(setOf("pairing_id", "secret", "client_id", "client_name", "scopes"), setOf("pairing_session"))
                             if (!SAFE_ID.matches(string("pairing_id", 128))) throw RequestValidationException("Invalid pairing_id")
-                            string("secret", 512)
+                            string("secret", 256)
                         }
                         else -> {
                             exact(setOf("pairing_code", "client_id", "client_name", "scopes"), setOf("pairing_session"))
@@ -205,8 +212,8 @@ data class ApiRequest(
                         }
                     }
                     if (!SAFE_ID.matches(string("client_id", 128))) throw RequestValidationException("Invalid client_id")
-                    string("client_name", 128)
-                    if (poll && !SAFE_ID.matches(string("pairing_session", 256))) throw RequestValidationException("Invalid pairing session")
+                    string("client_name", 96)
+                    if (poll) pairingSession()
                     scopes()
                 }
                 ApiRoute.PAIR_CANCEL -> {
@@ -215,9 +222,7 @@ data class ApiRequest(
                         throw RequestValidationException("Invalid pairing identity")
                     }
                     if (!NONCE.matches(string("verification_nonce", 22))) throw RequestValidationException("Invalid verification nonce")
-                    if ("pairing_session" in fields && !SAFE_ID.matches(string("pairing_session", 256))) {
-                        throw RequestValidationException("Invalid pairing session")
-                    }
+                    if ("pairing_session" in fields) pairingSession()
                 }
                 ApiRoute.PAIR_REVOKE_SELF, ApiRoute.DISPLAY_ORDER_AUTOMATIC, ApiRoute.SUNSHINE_RESTART -> {
                     exact(setOf("request_id")); requestId()
@@ -293,6 +298,7 @@ sealed interface VersionedPayload {
         val expiresAt: JsonValue.NumberValue?,
         val pairingSession: String?,
         val credential: PairedCredential?,
+        val wakeTarget: PairingWakeTarget?,
         val body: JsonValue.ObjectValue,
     ) : VersionedPayload
     data class Status(
@@ -320,6 +326,14 @@ data class PairedCredential(
     val token: String,
     val scopes: List<String>,
     val hostId: String,
+)
+
+data class PairingWakeTarget(
+    val available: Boolean,
+    val mac: String?,
+    val interfaceName: String?,
+    val sourceAddress: String?,
+    val reason: String?,
 )
 
 data class DisplayOutputSummary(

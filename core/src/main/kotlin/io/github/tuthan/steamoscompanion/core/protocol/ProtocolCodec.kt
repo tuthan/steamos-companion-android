@@ -122,6 +122,9 @@ object ProtocolCodec {
         val expiresAt = body["expires_at"] as? JsonValue.NumberValue
         if (body["expires_at"] != null && expiresAt == null) throw JsonFormatException("'expires_at' must be numeric")
         val session = body["pairing_session"].nullableString("pairing_session", 256)
+        if (session != null && !PAIRING_SESSION.matches(session)) {
+            throw JsonFormatException("Pairing session is invalid")
+        }
         val credential = (body["credential"] as? JsonValue.ObjectValue)?.let { item ->
             val scopes = item["scopes"].asArray("credential.scopes").map { bounded(it.asString("scope"), "scope", 64) }
             if (scopes.size > 3 || scopes.distinct().size != scopes.size || scopes.any { it !in setOf("status.read", "power.control", "display.control") }) {
@@ -134,13 +137,30 @@ object ProtocolCodec {
                 hostId = bounded(item["host_id"].asString("credential.host_id"), "credential.host_id", 128),
             )
         }
+        val wakeTarget = (body["wake_target"] as? JsonValue.ObjectValue)?.let { item ->
+            val available = (item["available"] as? JsonValue.BooleanValue)?.value
+                ?: throw JsonFormatException("'wake_target.available' must be boolean")
+            val mac = item["mac"].nullableString("wake_target.mac", 32)
+            if (available && mac?.let { Regex("[0-9a-f]{12}").matches(it) } != true) {
+                throw JsonFormatException("Available pairing wake target needs a MAC address")
+            }
+            PairingWakeTarget(
+                available = available,
+                mac = mac,
+                interfaceName = item["interface"].nullableString("wake_target.interface", 32),
+                sourceAddress = item["source_address"].nullableString("wake_target.source_address", 64),
+                reason = item["reason"].nullableString("wake_target.reason", 256),
+            )
+        }
         if (stateText == "pending" && (pairingId == null || expiresAt == null)) {
             throw JsonFormatException("Pending pairing response is incomplete")
         }
-        if (stateText == "approved" && (pairingId == null || hostId == null || credential == null || credential.hostId != hostId)) {
+        if (stateText == "approved" &&
+            (pairingId == null || hostId == null || credential == null || credential.hostId != hostId || wakeTarget == null)
+        ) {
             throw JsonFormatException("Approved pairing response is incomplete or inconsistent")
         }
-        return VersionedPayload.Pairing(state, pairingId, hostId, expiresAt, session, credential, body)
+        return VersionedPayload.Pairing(state, pairingId, hostId, expiresAt, session, credential, wakeTarget, body)
     }
 
     private fun parseStatus(body: JsonValue.ObjectValue): VersionedPayload.Status {
@@ -278,6 +298,7 @@ object ProtocolCodec {
 
     private val ERROR_CODE = Regex("[a-z][a-z0-9_]{0,63}")
     private val FINGERPRINT = Regex("sha256:[0-9a-f]{64}")
+    private val PAIRING_SESSION = Regex("[A-Za-z0-9_-]{16,256}")
 
     const val SUPPORTED_PROTOCOL_VERSION = 1
     const val DISCOVERY_SERVICE = "steamos-companion"

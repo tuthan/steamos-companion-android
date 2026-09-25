@@ -10,7 +10,19 @@ class PairingStateTransactions(private val repository: EncryptedStateRepository)
             throw StateInvariantException(StateInvariantCode.INVALID_FIELD, "Pairing generation exhausted")
         }
         val nextGeneration = state.pairingGeneration + 1
-        val fresh = candidate.copy(generation = nextGeneration, phase = CandidatePhase.READY, pairingId = null, pairingSession = null, stagedCredential = null)
+        val payloadPairingId = if (candidate.variant == PairingVariant.ADVANCED_PAYLOAD) candidate.payloadId else null
+        val fresh = candidate.copy(
+            generation = nextGeneration,
+            phase = CandidatePhase.READY,
+            pairingId = payloadPairingId,
+            pairingSession = null,
+            stagedCredential = null,
+            requestStartedAtMillis = null,
+            localExpiresAtMillis = null,
+            hostExpiresAtMillis = null,
+            expiresAtMillis = candidate.payloadExpiresAtMillis ?: candidate.expiresAtMillis,
+            pollNotBeforeMillis = null,
+        )
         fresh.validated(nextGeneration)
         state.copy(pairingGeneration = nextGeneration, candidate = fresh)
     }
