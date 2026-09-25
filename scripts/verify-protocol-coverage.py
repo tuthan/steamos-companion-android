@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = ROOT / "protocol"
 INVENTORY = ROOT / "docs" / "protocol-coverage.md"
+KOTLIN_TESTS = ROOT / "core" / "src" / "test" / "kotlin"
 INDEX = "fixtures/contract/index.json"  # the fixture catalogue itself, not a case
 
 # The closed route set dispatched by host/backend/service.py handle_http at the pinned commit.
@@ -47,6 +48,13 @@ def fail(errors: list[str]) -> None:
 
 def main() -> None:
     pinned = set(json.loads((PROTOCOL / "SOURCE.json").read_text(encoding="utf-8"))["files"])
+    declared_tests: set[tuple[str, str]] = set()
+    test_class = re.compile(r"\bclass\s+([A-Za-z]+Test)\s*\{([\s\S]*?)^}", re.MULTILINE)
+    test_method = re.compile(r"@Test\s+fun\s+([A-Za-z0-9_]+)\s*\(")
+    for source in KOTLIN_TESTS.rglob("*.kt"):
+        source_text = source.read_text(encoding="utf-8")
+        for match in test_class.finditer(source_text):
+            declared_tests.update((match.group(1), method) for method in test_method.findall(match.group(2)))
     errors: list[str] = []
     rows = []
     for number, line in enumerate(INVENTORY.read_text(encoding="utf-8").splitlines(), 1):
@@ -64,6 +72,10 @@ def main() -> None:
         route = row["route"]
         if route not in PINNED_ROUTES:
             errors.append(f"line {number}: {route!r} is not a pinned route")
+        test_name = row["test"]
+        test_class_name, method_name = test_name.split(".", 1)
+        if (test_class_name, method_name) not in declared_tests:
+            errors.append(f"line {number}: Kotlin test {test_name} is not declared")
         covered_routes.add(route)
         fixtures = re.findall(r"`([^`]+)`", row["fixture"])
         if not fixtures:
@@ -86,7 +98,7 @@ def main() -> None:
 
     if errors:
         fail(errors)
-    print(f"coverage inventory verified: {len(rows)} cases, {len(covered_routes)} routes, {len(claimed)} fixtures")
+    print(f"coverage inventory verified: {len(rows)} cases, {len(covered_routes)} routes, {len(claimed)} fixtures, {len(declared_tests)} Kotlin tests")
 
 
 if __name__ == "__main__":

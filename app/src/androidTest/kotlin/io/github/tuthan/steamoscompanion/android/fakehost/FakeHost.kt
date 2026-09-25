@@ -51,6 +51,15 @@ class FakeHost(private val assets: AssetManager) : Closeable {
 
         /** Reads the request, then closes the TLS connection without answering: a lost reply. */
         data object Lost : Reply
+
+        /** Discovery body bound to this fake host's generated TLS leaf certificate. */
+        data object DiscoveryCandidate : Reply
+
+        /** Delays the complete response after the request has been read. */
+        data class DelayedFixture(val delayMillis: Long, val assetPath: String) : Reply
+
+        /** Sends exact HTTP bytes for malformed/truncated framing checks. */
+        data class Raw(val bytes: ByteArray) : Reply
     }
 
     data class Recorded(val method: String, val path: String, val headers: Map<String, String>, val body: String, val tlsUnique: ByteArray)
@@ -110,6 +119,20 @@ class FakeHost(private val assets: AssetManager) : Closeable {
             val reply = scripts[key(request.method, request.path)]?.pollFirst() ?: defaults[key(request.method, request.path)]
             when (reply) {
                 Reply.Lost -> protocol.close()
+                Reply.DiscoveryCandidate -> respond(
+                    protocol,
+                    200,
+                    """{"protocol_version":1,"service":"steamos-companion","host_id":"host-fixture0001xxxxxxxxxxxxx","certificate_fingerprint":"sha256:$certificateSha256","name":"Fake Deck"}""",
+                )
+                is Reply.DelayedFixture -> {
+                    Thread.sleep(reply.delayMillis)
+                    respondWithFixture(protocol, reply.assetPath)
+                }
+                is Reply.Raw -> {
+                    protocol.outputStream.write(reply.bytes)
+                    protocol.outputStream.flush()
+                    protocol.close()
+                }
                 is Reply.Fixture -> respondWithFixture(protocol, reply.assetPath)
                 is Reply.Body -> respond(protocol, reply.status, asset(reply.assetPath))
                 null -> respondWithFixture(protocol, NOT_FOUND)

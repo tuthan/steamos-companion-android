@@ -4,6 +4,7 @@ import java.io.IOException
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.Socket
+import java.net.UnknownHostException
 
 /** A LAN path contains bounded addressing facts and no Android platform objects. */
 data class LanPath(
@@ -19,6 +20,10 @@ data class LanPath(
  */
 interface NetworkAccess {
     fun activeLanPaths(): List<LanPath>
+
+    /** Resolve on the selected network when the platform supports per-network DNS. */
+    @Throws(UnknownHostException::class)
+    fun resolve(host: String, path: LanPath): List<InetAddress> = InetAddress.getAllByName(host).toList()
 
     @Throws(IOException::class)
     fun bind(socket: Socket, path: LanPath)

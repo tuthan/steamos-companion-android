@@ -6,7 +6,17 @@ kotlin {
     jvmToolchain(17)
 }
 
+sourceSets {
+    test {
+        resources.srcDir(rootProject.file("protocol"))
+    }
+}
+
 dependencies {
+    implementation(libs.bouncycastle.tls)
+    implementation(libs.bouncycastle.prov)
+    implementation(libs.bouncycastle.util)
+
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.junit)
 }
