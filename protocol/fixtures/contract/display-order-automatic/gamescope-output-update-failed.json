@@ -1,0 +1,21 @@
+{
+  "case": "display-order-automatic/gamescope-output-update-failed",
+  "description": "Removing the saved override failed at daemon-reload and was rolled back.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order/automatic",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-reset-1"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "gamescope_output_update_failed",
+      "message": "user systemd command failed: Failed to connect to bus: No such file or directory"
+    }
+  }
+}

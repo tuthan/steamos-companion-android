@@ -1,0 +1,19 @@
+{
+  "case": "unsupported/query-string",
+  "description": "Any query string is rejected by the HTTPS layer before routing.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/status?verbose=1",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "query strings are not accepted"
+    }
+  }
+}

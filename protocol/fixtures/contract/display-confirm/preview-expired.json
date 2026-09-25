@@ -1,0 +1,23 @@
+{
+  "case": "display-confirm/preview-expired",
+  "description": "Confirmation 16 seconds after the preview (15-second deadline).",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/confirm",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "confirm-1",
+      "preview_id": "op-fixture0001xxxxxxxxxxxxx",
+      "visible": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "preview_expired",
+      "message": "preview deadline has expired"
+    }
+  }
+}

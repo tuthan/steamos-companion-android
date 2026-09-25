@@ -1,0 +1,25 @@
+{
+  "case": "pair-request/verification-scope-conflict",
+  "description": "The client changed its requested scopes between the first request and a poll.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read"
+      ],
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "pairing_scope_conflict",
+      "message": "pairing scopes changed while approval was pending"
+    }
+  }
+}

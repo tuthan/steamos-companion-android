@@ -1,0 +1,65 @@
+{
+  "case": "display-preview/accepted",
+  "description": "Preview 3840x2160@60 on output 1; the host restores the baseline unless confirmed before the deadline.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/preview",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "preview-1",
+      "output_id": "1",
+      "mode_id": "2",
+      "generation": 4
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "preview-1",
+        "state": "accepted",
+        "kind": "display.preview",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": null,
+        "reason": null,
+        "preview_id": "op-fixture0001xxxxxxxxxxxxx",
+        "target": {
+          "output_id": "1",
+          "mode_id": "2",
+          "generation": 4
+        }
+      },
+      "preview": {
+        "preview_id": "op-fixture0001xxxxxxxxxxxxx",
+        "output_identity": {
+          "id": "1",
+          "name": "HDMI-A-1",
+          "description": "Reference",
+          "is_internal": false
+        },
+        "output_id": "1",
+        "generation": 4,
+        "baseline_mode": {
+          "id": "3352",
+          "width": 3440,
+          "height": 1440,
+          "refresh_hz": 59
+        },
+        "target_mode": {
+          "id": "2",
+          "width": 3840,
+          "height": 2160,
+          "refresh_hz": 60
+        },
+        "deadline": 1789300815.25,
+        "restore_state": null,
+        "created_at": "2026-09-13T12:00:00.250000Z"
+      }
+    }
+  }
+}

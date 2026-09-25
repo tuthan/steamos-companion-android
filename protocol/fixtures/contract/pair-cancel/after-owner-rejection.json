@@ -1,0 +1,23 @@
+{
+  "case": "pair-cancel/after-owner-rejection",
+  "description": "Cancellation racing an owner rejection reports the rejected terminal state.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/cancel",
+    "headers": {},
+    "body": {
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_id": "client-android",
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "state": "rejected",
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "case": "pair-request/verification-session-required",
+  "description": "Same nonce re-sent on a new bound connection without the pairing_session returned by the first request.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "pairing_session_required",
+      "message": "pairing session is required; start a new request"
+    }
+  }
+}

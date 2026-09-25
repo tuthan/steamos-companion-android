@@ -1,0 +1,27 @@
+{
+  "case": "pair-request/verification-consumed-after-host-reload",
+  "description": "Owner approved, then the host reloaded before the client polled; the in-memory credential is gone and cannot be re-issued.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 410,
+    "body": {
+      "error": "pairing_consumed",
+      "message": "approved credential has already been delivered; create a new pairing"
+    }
+  }
+}

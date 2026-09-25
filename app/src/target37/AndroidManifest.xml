@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Target-37 permission-test configuration: Android 17 requires this grant for LAN sockets. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
+</manifest>

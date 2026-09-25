@@ -1,0 +1,23 @@
+{
+  "case": "display-confirm/readback-not-confirmed",
+  "description": "Steam returned from set_mode but the readback still shows the baseline mode after the bounded retry.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/confirm",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "confirm-1",
+      "preview_id": "op-fixture0001xxxxxxxxxxxxx",
+      "visible": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "readback_not_confirmed",
+      "message": "current Steam readback does not match the preview target"
+    }
+  }
+}

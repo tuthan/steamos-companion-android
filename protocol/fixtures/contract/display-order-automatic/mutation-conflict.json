@@ -1,0 +1,21 @@
+{
+  "case": "display-order-automatic/mutation-conflict",
+  "description": "A power operation from this client is still in progress.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order/automatic",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-reset-1"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "mutation_conflict",
+      "message": "another mutation is still in progress"
+    }
+  }
+}

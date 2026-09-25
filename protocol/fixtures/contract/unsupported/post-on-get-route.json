@@ -1,0 +1,21 @@
+{
+  "case": "unsupported/post-on-get-route",
+  "description": "POST /v1/status.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/status",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "r-1"
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "not_found",
+      "message": "route is not supported"
+    }
+  }
+}

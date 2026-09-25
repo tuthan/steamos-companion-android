@@ -1,0 +1,22 @@
+{
+  "case": "display-restore/preview-not-found",
+  "description": "source:preview with no preview owned by this client.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/restore",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "restore-1",
+      "source": "preview"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "preview_not_found",
+      "message": "there is no restorable preview owned by this client"
+    }
+  }
+}

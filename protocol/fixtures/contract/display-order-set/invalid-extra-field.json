@@ -1,0 +1,28 @@
+{
+  "case": "display-order-set/invalid-extra-field",
+  "description": "Body carries a field outside {request_id, output_keys, generation, restart}.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-1",
+      "output_keys": [
+        "drm:card0:HDMI-A-1",
+        "drm:card0:DP-1"
+      ],
+      "generation": 1,
+      "restart": false,
+      "connector": "DP-1"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "display order accepts only request_id, output_keys, generation, and restart"
+    }
+  }
+}

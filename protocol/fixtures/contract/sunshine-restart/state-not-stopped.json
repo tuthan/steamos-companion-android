@@ -1,0 +1,21 @@
+{
+  "case": "sunshine-restart/state-not-stopped",
+  "description": "The owner reports Sunshine running.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/sunshine/restart",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "sunshine-restart-1"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "state_not_stopped",
+      "message": "Sunshine is not freshly confirmed stopped"
+    }
+  }
+}

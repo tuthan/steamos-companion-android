@@ -1,0 +1,23 @@
+{
+  "case": "pair-cancel/invalid-body",
+  "description": "Cancellation body carries an unsupported field.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/cancel",
+    "headers": {},
+    "body": {
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_id": "client-android",
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx",
+      "reason": "user closed dialog"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "pairing cancellation accepts pairing_id, verification_nonce, client_id, and optional pairing_session"
+    }
+  }
+}

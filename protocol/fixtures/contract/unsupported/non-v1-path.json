@@ -1,0 +1,17 @@
+{
+  "case": "unsupported/non-v1-path",
+  "description": "Paths outside /v1/ are not routed.",
+  "request": {
+    "method": "GET",
+    "path": "/status",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "not_found",
+      "message": "route is not supported"
+    }
+  }
+}

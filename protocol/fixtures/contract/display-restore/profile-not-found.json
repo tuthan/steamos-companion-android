@@ -1,0 +1,22 @@
+{
+  "case": "display-restore/profile-not-found",
+  "description": "source:verified when no owner-verified profile exists.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/restore",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "restore-1",
+      "source": "verified"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "profile_not_found",
+      "message": "no owner-verified recovery profile is available"
+    }
+  }
+}

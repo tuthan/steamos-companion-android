@@ -1,0 +1,22 @@
+{
+  "case": "power/forbidden-scope",
+  "description": "Credential granted only status.read.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/power",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "power-1",
+      "action": "suspend"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": "forbidden",
+      "message": "credential does not have the required scope"
+    }
+  }
+}

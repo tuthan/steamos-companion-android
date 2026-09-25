@@ -1,0 +1,28 @@
+{
+  "case": "operations/sunshine-restart-succeeded",
+  "description": "Owner started Sunshine and the provider confirmed it running.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "sunshine-restart-1",
+        "state": "succeeded",
+        "kind": "sunshine.restart",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": "running",
+        "reason": null
+      }
+    }
+  }
+}

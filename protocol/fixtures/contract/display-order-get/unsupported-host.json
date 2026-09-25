@@ -1,0 +1,68 @@
+{
+  "case": "display-order-get/unsupported-host",
+  "description": "The SteamOS gamescope-session script has an unrecognised format; reported as a resource, not an error.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "display_order": {
+        "available": false,
+        "generation": 1,
+        "observed_at": "2026-09-13T12:00:00.250000Z",
+        "output_keys": [
+          "drm:card0:DP-1",
+          "drm:card0:HDMI-A-1",
+          "drm:card0:HDMI-A-2",
+          "drm:card0:eDP-1"
+        ],
+        "outputs": [
+          {
+            "output_key": "drm:card0:DP-1",
+            "display_name": "DELL U2723QE",
+            "connector": "DP-1",
+            "connected": true,
+            "active": null
+          },
+          {
+            "output_key": "drm:card0:HDMI-A-1",
+            "display_name": "LG TV SSCR2",
+            "connector": "HDMI-A-1",
+            "connected": true,
+            "active": null
+          },
+          {
+            "output_key": "drm:card0:HDMI-A-2",
+            "display_name": "HDMI-A-2",
+            "connector": "HDMI-A-2",
+            "connected": false,
+            "active": null
+          },
+          {
+            "output_key": "drm:card0:eDP-1",
+            "display_name": "eDP-1",
+            "connector": "eDP-1",
+            "connected": true,
+            "active": null
+          }
+        ],
+        "saved_output_keys": [],
+        "restart_required": false,
+        "restart_available": false,
+        "adapter": null,
+        "unsupported": true,
+        "stale": false,
+        "ambiguous": false,
+        "previous_reading": false,
+        "reason": "This SteamOS gamescope-session format is not supported safely"
+      }
+    }
+  }
+}

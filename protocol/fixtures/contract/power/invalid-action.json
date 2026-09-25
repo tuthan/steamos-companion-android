@@ -1,0 +1,22 @@
+{
+  "case": "power/invalid-action",
+  "description": "action outside suspend/restart/shutdown.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/power",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "power-1",
+      "action": "reboot"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "action is unsupported"
+    }
+  }
+}

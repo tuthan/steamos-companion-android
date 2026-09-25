@@ -1,0 +1,22 @@
+{
+  "case": "display-restore/preview-expired",
+  "description": "source:preview after the preview deadline; host restoration is responsible.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/restore",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "restore-1",
+      "source": "preview"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "preview_expired",
+      "message": "preview deadline has expired; host restore is already responsible"
+    }
+  }
+}

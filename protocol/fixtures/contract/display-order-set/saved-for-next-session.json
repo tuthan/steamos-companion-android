@@ -1,0 +1,48 @@
+{
+  "case": "display-order-set/saved-for-next-session",
+  "description": "Save for next session (restart:false); completes synchronously.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-1",
+      "output_keys": [
+        "drm:card0:HDMI-A-1",
+        "drm:card0:DP-1"
+      ],
+      "generation": 1,
+      "restart": false
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "order-1",
+        "state": "succeeded",
+        "kind": "display.order",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": "gamescope_output_configured",
+        "reason": "Output order saved for the next Gaming Mode session.",
+        "target": {
+          "output_keys": [
+            "drm:card0:HDMI-A-1",
+            "drm:card0:DP-1"
+          ],
+          "connectors": [
+            "HDMI-A-1",
+            "DP-1"
+          ],
+          "generation": 1,
+          "restart": false
+        }
+      }
+    }
+  }
+}

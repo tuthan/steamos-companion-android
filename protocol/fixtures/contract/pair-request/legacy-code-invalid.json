@@ -1,0 +1,28 @@
+{
+  "case": "pair-request/legacy-code-invalid",
+  "description": "Legacy form with a code that matches no pairing.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "pairing_code": "0000-0000",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "unauthorized",
+      "message": "pairing code is invalid or expired"
+    }
+  }
+}

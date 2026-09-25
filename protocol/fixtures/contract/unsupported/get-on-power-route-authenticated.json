@@ -1,0 +1,19 @@
+{
+  "case": "unsupported/get-on-power-route-authenticated",
+  "description": "Current host behaviour, not a design choice: GET /v1/power with a power.control credential reaches the POST handler with an empty body and fails with an unhandled KeyError.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/power",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 500,
+    "body": {
+      "error": "internal_error",
+      "message": "the host could not safely complete the request"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "case": "pair-request/queue-full",
+  "description": "32 unexpired verification requests are already pending (seeded into host state), so a new nonce is refused.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Retry-After": "2"
+    },
+    "body": {
+      "error": "pairing_queue_full",
+      "message": "too many pending pairing requests"
+    }
+  }
+}

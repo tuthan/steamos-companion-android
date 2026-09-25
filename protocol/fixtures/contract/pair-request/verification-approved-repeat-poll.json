@@ -1,0 +1,27 @@
+{
+  "case": "pair-request/verification-approved-repeat-poll",
+  "description": "Polling again after the credential was delivered: the record is consumed and reported as not found.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "pairing_not_found",
+      "message": "pairing is not available"
+    }
+  }
+}

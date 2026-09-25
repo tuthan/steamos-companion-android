@@ -1,0 +1,21 @@
+{
+  "case": "pair-revoke-self/already-revoked",
+  "description": "Replaying the revocation with the now-revoked credential.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/revoke-self",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "revoke-self-1"
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "unauthorized",
+      "message": "authentication failed"
+    }
+  }
+}

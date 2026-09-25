@@ -1,0 +1,28 @@
+{
+  "case": "pair-request/invalid-nonce",
+  "description": "verification_nonce is not 16 bytes of unpadded base64url.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0O",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "verification_nonce is invalid"
+    }
+  }
+}

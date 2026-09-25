@@ -1,0 +1,22 @@
+{
+  "case": "pair-cancel/invalid-session",
+  "description": "pairing_session does not match the stored handle.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/cancel",
+    "headers": {},
+    "body": {
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_id": "client-android",
+      "pairing_session": "fixture-wrong-pairing-session"
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "unauthorized",
+      "message": "pairing session is invalid"
+    }
+  }
+}

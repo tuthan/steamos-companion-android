@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+**/build/
+
+# Android Studio and local SDK paths
+.idea/
+*.iml
+local.properties
+
+# Kotlin
+.kotlin/
+
+# Signing material and local secrets
+*.jks
+*.keystore
+*.properties.local
+
+# Emulator and LAN-matrix run output
+/build-logs/
+
+# Socket CLI facts file
+.socket.facts.json

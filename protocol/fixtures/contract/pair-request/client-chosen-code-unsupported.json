@@ -1,0 +1,28 @@
+{
+  "case": "pair-request/client-chosen-code-unsupported",
+  "description": "An outdated client sends the removed client-chosen verification_code field.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_code": "1234-5678",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "pairing_method_unsupported",
+      "message": "this host requires an updated SteamOS Companion client; the client-chosen pairing code is no longer accepted"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "case": "display-confirm/preview-not-found",
+  "description": "No active preview with this preview_id.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/confirm",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "confirm-1",
+      "preview_id": "op-unknown",
+      "visible": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "preview_not_found",
+      "message": "preview is unavailable or expired"
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "case": "display-order-get/saved-output-disconnected",
+  "description": "The saved order starts with HDMI-A-2, which is currently disconnected (saved through the local Decky API before it was unplugged).",
+  "request": {
+    "method": "GET",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "display_order": {
+        "available": true,
+        "generation": 1,
+        "observed_at": "2026-09-13T12:00:00.250000Z",
+        "output_keys": [
+          "drm:card0:DP-1",
+          "drm:card0:HDMI-A-1",
+          "drm:card0:HDMI-A-2",
+          "drm:card0:eDP-1"
+        ],
+        "outputs": [
+          {
+            "output_key": "drm:card0:DP-1",
+            "display_name": "DELL U2723QE",
+            "connector": "DP-1",
+            "connected": true,
+            "active": null
+          },
+          {
+            "output_key": "drm:card0:HDMI-A-1",
+            "display_name": "LG TV SSCR2",
+            "connector": "HDMI-A-1",
+            "connected": true,
+            "active": null
+          },
+          {
+            "output_key": "drm:card0:HDMI-A-2",
+            "display_name": "HDMI-A-2",
+            "connector": "HDMI-A-2",
+            "connected": false,
+            "active": null
+          },
+          {
+            "output_key": "drm:card0:eDP-1",
+            "display_name": "eDP-1",
+            "connector": "eDP-1",
+            "connected": true,
+            "active": null
+          }
+        ],
+        "saved_output_keys": [
+          "drm:card0:HDMI-A-2",
+          "drm:card0:DP-1"
+        ],
+        "restart_required": true,
+        "restart_available": true,
+        "adapter": "gamescope-session-prefer-output",
+        "unsupported": false,
+        "stale": false,
+        "ambiguous": false,
+        "previous_reading": false,
+        "reason": "The preferred HDMI-A-2 output is currently unavailable; the next connected output is used."
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "case": "operations/accepted",
+  "description": "Owned power operation before the host worker has dispatched it.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "power-1",
+        "state": "accepted",
+        "kind": "power.suspend",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": null,
+        "reason": null
+      }
+    }
+  }
+}

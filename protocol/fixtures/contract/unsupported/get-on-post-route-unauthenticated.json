@@ -1,0 +1,17 @@
+{
+  "case": "unsupported/get-on-post-route-unauthenticated",
+  "description": "GET /v1/power without a credential.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/power",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "unauthorized",
+      "message": "authentication required"
+    }
+  }
+}

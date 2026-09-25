@@ -1,0 +1,24 @@
+{
+  "case": "display-save-current/visible-false",
+  "description": "visible:false is rejected by route validation before the service's owner_confirmation_required check.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/save-current",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "save-current-1",
+      "output_id": "1",
+      "generation": 4,
+      "visible": false
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "visible must be true to save the current display mode"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "case": "display-order-set/invalid-duplicate-keys",
+  "description": "The same output key appears twice.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-1",
+      "output_keys": [
+        "drm:card0:DP-1",
+        "drm:card0:DP-1"
+      ],
+      "generation": 1,
+      "restart": false
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "display order contains duplicate output keys"
+    }
+  }
+}

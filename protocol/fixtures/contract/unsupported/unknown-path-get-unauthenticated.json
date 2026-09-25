@@ -1,0 +1,17 @@
+{
+  "case": "unsupported/unknown-path-get-unauthenticated",
+  "description": "GET to an unknown /v1 path without a credential is an authentication failure, not 404.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/shell",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "unauthorized",
+      "message": "authentication required"
+    }
+  }
+}

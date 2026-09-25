@@ -1,0 +1,29 @@
+{
+  "case": "pair-request/advanced-not-found",
+  "description": "Advanced form with a pairing_id the host does not know.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "pairing_id": "pair-unknown",
+      "secret": "not-a-secret",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "pairing_not_found",
+      "message": "pairing is not available"
+    }
+  }
+}

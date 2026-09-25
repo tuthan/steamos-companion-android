@@ -1,0 +1,22 @@
+{
+  "case": "pair-cancel/already-approved",
+  "description": "Owner approved before the cancellation arrived (credential not yet collected).",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/cancel",
+    "headers": {},
+    "body": {
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_id": "client-android",
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "pairing_already_approved",
+      "message": "pairing was already approved"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "case": "unsupported/unknown-path-post",
+  "description": "POST to an unknown /v1 path is rejected before authentication.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/shell",
+    "headers": {},
+    "body": {
+      "request_id": "r-1"
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "not_found",
+      "message": "route is not supported"
+    }
+  }
+}

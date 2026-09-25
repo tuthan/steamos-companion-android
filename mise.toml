@@ -1,0 +1,3 @@
+# Exact JDK for Gradle, AGP, and the Kotlin toolchain; see docs/build-decision.md.
+[tools]
+java = "temurin-17.0.20+8"

@@ -1,0 +1,22 @@
+{
+  "case": "power/mutation-conflict",
+  "description": "A new request_id while the previous power operation is still in progress.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/power",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "power-2",
+      "action": "restart"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "mutation_conflict",
+      "message": "another mutation is still in progress"
+    }
+  }
+}

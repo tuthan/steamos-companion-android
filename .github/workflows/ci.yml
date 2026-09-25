@@ -1,0 +1,33 @@
+# JVM tier and offline contract checks. Emulator and physical tiers run locally; see docs/build-decision.md.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  jvm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify wrapper, vendored protocol bundle, and coverage inventory
+        run: |
+          echo "497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7  gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
+          python3 scripts/verify-protocol-hashes.py
+          python3 scripts/verify-protocol-coverage.py
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: 17.0.20+8
+
+      - name: Build, JVM tests, and merged-manifest checks
+        run: ./gradlew --no-daemon --stacktrace check assembleBaselineDebug assembleTarget37Debug assembleBaselineDebugAndroidTest

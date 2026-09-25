@@ -1,0 +1,27 @@
+{
+  "case": "display-order-set/gamescope-output-unsupported",
+  "description": "Host with an unsupported gamescope-session format.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-1",
+      "output_keys": [
+        "drm:card0:HDMI-A-1",
+        "drm:card0:DP-1"
+      ],
+      "generation": 1,
+      "restart": false
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "gamescope_output_unsupported",
+      "message": "This SteamOS gamescope-session format is not supported safely"
+    }
+  }
+}

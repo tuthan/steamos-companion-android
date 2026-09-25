@@ -1,0 +1,20 @@
+{
+  "case": "pair-request/malformed-json",
+  "description": "Request body is not valid JSON (raw_body holds the exact bytes sent).",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": null,
+    "raw_body": "{\"verification_nonce\": "
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "request body is not valid JSON"
+    }
+  }
+}

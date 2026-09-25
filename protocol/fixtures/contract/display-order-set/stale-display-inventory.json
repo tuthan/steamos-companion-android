@@ -1,0 +1,27 @@
+{
+  "case": "display-order-set/stale-display-inventory",
+  "description": "generation does not match the current DRM inventory.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-1",
+      "output_keys": [
+        "drm:card0:HDMI-A-1",
+        "drm:card0:DP-1"
+      ],
+      "generation": 2,
+      "restart": false
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "stale_display_inventory",
+      "message": "display inventory changed; refresh the order"
+    }
+  }
+}

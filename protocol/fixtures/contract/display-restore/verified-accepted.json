@@ -1,0 +1,32 @@
+{
+  "case": "display-restore/verified-accepted",
+  "description": "Restore the owner-verified profile saved by save-current.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/restore",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "restore-1",
+      "source": "verified",
+      "profile_id": "profile-fixture0001xxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0002xxxxxxxxxxxxx",
+        "request_id": "restore-1",
+        "state": "accepted",
+        "kind": "display.restore",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": null,
+        "reason": null
+      }
+    }
+  }
+}

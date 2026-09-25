@@ -1,0 +1,24 @@
+{
+  "case": "display-save-current/readback-not-confirmed",
+  "description": "Steam reports a current_mode_id that is not in the advertised mode list.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/save-current",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "save-current-1",
+      "output_id": "1",
+      "generation": 4,
+      "visible": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "readback_not_confirmed",
+      "message": "current display mode could not be read back"
+    }
+  }
+}

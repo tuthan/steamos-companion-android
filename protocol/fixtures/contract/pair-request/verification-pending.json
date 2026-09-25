@@ -1,0 +1,31 @@
+{
+  "case": "pair-request/verification-pending",
+  "description": "SAS form: first request on a direct TLS 1.2 connection with a matching channel binding. Host and client both derive the comparison code 3969-3759 from the nonce and the pinned fingerprint; it is never transmitted.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "state": "pending",
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "expires_at": 1789300920.25,
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  }
+}

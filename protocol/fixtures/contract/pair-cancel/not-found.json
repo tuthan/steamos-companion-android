@@ -1,0 +1,22 @@
+{
+  "case": "pair-cancel/not-found",
+  "description": "pairing_id is unknown.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/cancel",
+    "headers": {},
+    "body": {
+      "pairing_id": "pair-unknown",
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_id": "client-android",
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "pairing_not_found",
+      "message": "pairing is not available"
+    }
+  }
+}

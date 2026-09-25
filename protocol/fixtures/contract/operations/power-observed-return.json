@@ -1,0 +1,31 @@
+{
+  "case": "operations/power-observed-return",
+  "description": "Steam returned from the power method; the physical transition is not confirmed.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "power-1",
+        "state": "observed_return",
+        "kind": "power.suspend",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": "method_returned",
+        "reason": "Steam returned; physical suspend transition is not confirmed by this response",
+        "target": {
+          "action": "suspend"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "case": "pair-request/channel-binding-mismatch",
+  "description": "The binding header differs from the tls-unique value of the connection (for example a TLS-terminating relay).",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "cmVsYXllZC10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "pairing_channel_mismatch",
+      "message": "pairing channel verification failed; select the host again and retry"
+    }
+  }
+}

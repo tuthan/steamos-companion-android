@@ -1,0 +1,21 @@
+{
+  "case": "sunshine-restart/provider-unavailable",
+  "description": "Sunshine monitoring is off (the default), so no owner provider is usable.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/sunshine/restart",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "sunshine-restart-1"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "provider_unavailable",
+      "message": "Sunshine monitoring/provider is unavailable"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "case": "display-order-set/ambiguous-display-identity",
+  "description": "DP-1 is connected on two GPUs, so the connector cannot be targeted.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-1",
+      "output_keys": [
+        "drm:card0:DP-1"
+      ],
+      "generation": 1,
+      "restart": false
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "ambiguous_display_identity",
+      "message": "a selected connector identity is ambiguous"
+    }
+  }
+}

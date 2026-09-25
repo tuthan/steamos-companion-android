@@ -1,0 +1,27 @@
+{
+  "case": "pair-request/verification-expired",
+  "description": "Poll 121 seconds after the request; the 120-second window has elapsed.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 410,
+    "body": {
+      "error": "pairing_expired",
+      "message": "pairing has expired"
+    }
+  }
+}

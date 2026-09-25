@@ -1,0 +1,19 @@
+{
+  "case": "operations/not-found-missing",
+  "description": "No operation with this id exists.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/op-unknown",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "operation_not_found",
+      "message": "operation is not available to this credential"
+    }
+  }
+}

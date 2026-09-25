@@ -1,0 +1,28 @@
+{
+  "case": "operations/power-unknown-after-host-reload",
+  "description": "The host reloaded before an accepted operation could be reconciled.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "power-1",
+        "state": "unknown",
+        "kind": "power.suspend",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": null,
+        "reason": "host reloaded before the operation could be reconciled"
+      }
+    }
+  }
+}

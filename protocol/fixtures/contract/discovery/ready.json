@@ -1,0 +1,20 @@
+{
+  "case": "discovery/ready",
+  "description": "Unauthenticated discovery on a host with TLS material; certificate_fingerprint is what the client pins.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/discovery",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "service": "steamos-companion",
+      "host_id": "host-fixture0001xxxxxxxxxxxxx",
+      "certificate_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "name": "SteamOS device"
+    }
+  }
+}

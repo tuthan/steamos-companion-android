@@ -1,0 +1,26 @@
+{
+  "case": "pair-request/channel-binding-header-missing",
+  "description": "First request on a TLS 1.2 connection without the X-SteamOS-Companion-TLS-Binding header.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "pairing_channel_mismatch",
+      "message": "pairing channel verification failed; select the host again and retry"
+    }
+  }
+}

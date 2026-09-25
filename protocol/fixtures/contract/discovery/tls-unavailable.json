@@ -1,0 +1,17 @@
+{
+  "case": "discovery/tls-unavailable",
+  "description": "Host could not create or load its certificate.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/discovery",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 503,
+    "body": {
+      "error": "tls_unavailable",
+      "message": "host certificate is not ready"
+    }
+  }
+}

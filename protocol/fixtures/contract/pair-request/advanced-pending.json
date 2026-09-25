@@ -1,0 +1,32 @@
+{
+  "case": "pair-request/advanced-pending",
+  "description": "Advanced form: pairing_id and secret from the full payload created by the owner in Decky.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "secret": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "state": "pending",
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "expires_at": 1789300920.25,
+      "pairing_session": "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  }
+}

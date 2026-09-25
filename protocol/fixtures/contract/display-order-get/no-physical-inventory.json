@@ -1,0 +1,34 @@
+{
+  "case": "display-order-get/no-physical-inventory",
+  "description": "No readable DRM connectors.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/display/order",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "display_order": {
+        "available": false,
+        "generation": null,
+        "observed_at": null,
+        "output_keys": [],
+        "outputs": [],
+        "saved_output_keys": [],
+        "restart_required": true,
+        "restart_available": true,
+        "adapter": "gamescope-session-prefer-output",
+        "unsupported": false,
+        "stale": false,
+        "ambiguous": false,
+        "previous_reading": false,
+        "reason": "Physical display inventory is unavailable."
+      }
+    }
+  }
+}

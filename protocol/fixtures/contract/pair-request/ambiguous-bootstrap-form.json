@@ -1,0 +1,29 @@
+{
+  "case": "pair-request/ambiguous-bootstrap-form",
+  "description": "Body carries both verification_nonce and pairing_code.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "pairing_code": "4821-3579"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "pairing request must contain one bootstrap form"
+    }
+  }
+}

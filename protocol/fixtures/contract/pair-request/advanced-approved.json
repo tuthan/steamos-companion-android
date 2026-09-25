@@ -1,0 +1,47 @@
+{
+  "case": "pair-request/advanced-approved",
+  "description": "Advanced form after owner approval; the poll carries pairing_id, secret, and pairing_session.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "secret": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "pairing_session": "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "state": "approved",
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "host_id": "host-fixture0001xxxxxxxxxxxxx",
+      "credential": {
+        "client_id": "client-android",
+        "token": "fixture-token-0003-xxxxxxxxxxxxxxxxxxxxxxxx",
+        "scopes": [
+          "status.read",
+          "power.control",
+          "display.control"
+        ],
+        "host_id": "host-fixture0001xxxxxxxxxxxxx"
+      },
+      "wake_target": {
+        "available": true,
+        "mac": "001122334455",
+        "interface": "enp5s0",
+        "source_address": "192.168.50.24",
+        "reason": null
+      }
+    }
+  }
+}

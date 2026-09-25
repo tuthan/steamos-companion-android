@@ -1,0 +1,24 @@
+{
+  "case": "display-preview/forbidden-scope",
+  "description": "Credential granted without display.control.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/preview",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "preview-1",
+      "output_id": "1",
+      "mode_id": "2",
+      "generation": 4
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": "forbidden",
+      "message": "credential does not have the required scope"
+    }
+  }
+}

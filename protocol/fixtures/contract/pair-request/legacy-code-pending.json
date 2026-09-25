@@ -1,0 +1,31 @@
+{
+  "case": "pair-request/legacy-code-pending",
+  "description": "Legacy host-issued pairing_code form (the owner shows 4821-3579 in Decky).",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "pairing_code": "4821-3579",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "protocol_version": 1,
+      "state": "pending",
+      "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+      "expires_at": 1789300920.25,
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  }
+}

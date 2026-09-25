@@ -1,0 +1,33 @@
+{
+  "case": "display-order-automatic/cleared",
+  "description": "Reset a previously saved order to automatic.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/order/automatic",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "order-reset-1"
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0002xxxxxxxxxxxxx",
+        "request_id": "order-reset-1",
+        "state": "succeeded",
+        "kind": "display.order.reset",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": "gamescope_output_cleared",
+        "reason": "Automatic display order restored for the next Gaming Mode session.",
+        "target": {
+          "automatic": true
+        }
+      }
+    }
+  }
+}

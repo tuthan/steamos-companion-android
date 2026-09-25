@@ -1,0 +1,27 @@
+{
+  "case": "pair-request/verification-rejected",
+  "description": "Owner rejected the pending request in Decky.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {},
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Companion",
+      "client_id": "client-android",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "pairing_session": "fixture-token-0001-xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "pairing_rejected",
+      "message": "pairing was rejected by the device owner"
+    }
+  }
+}

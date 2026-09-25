@@ -1,0 +1,52 @@
+{
+  "case": "display-confirm/confirmed",
+  "description": "Steam applied the preview and read it back; the owner confirms the picture is visible.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/confirm",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "confirm-1",
+      "preview_id": "op-fixture0001xxxxxxxxxxxxx",
+      "visible": true
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0002xxxxxxxxxxxxx",
+        "request_id": "confirm-1",
+        "state": "succeeded",
+        "kind": "display.confirm",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": "visible_picture_confirmed",
+        "reason": null,
+        "target": {
+          "profile_id": "profile-fixture0001xxxxxxxxxxxxx"
+        }
+      },
+      "profile": {
+        "id": "profile-fixture0001xxxxxxxxxxxxx",
+        "output_identity": {
+          "id": "1",
+          "name": "HDMI-A-1",
+          "description": "Reference",
+          "is_internal": false
+        },
+        "output_id": "1",
+        "mode": {
+          "id": "2",
+          "width": 3840,
+          "height": 2160,
+          "refresh_hz": 60
+        },
+        "verified_at": "2026-09-13T12:00:00.250000Z"
+      }
+    }
+  }
+}

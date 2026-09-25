@@ -1,0 +1,23 @@
+{
+  "case": "display-confirm/not-preview-owner",
+  "description": "A second paired client tries to confirm another client's preview.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/display/confirm",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0004-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "confirm-1",
+      "preview_id": "op-fixture0001xxxxxxxxxxxxx",
+      "visible": true
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": "forbidden",
+      "message": "only the preview owner can confirm it"
+    }
+  }
+}

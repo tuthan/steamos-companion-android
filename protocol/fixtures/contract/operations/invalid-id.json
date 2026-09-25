@@ -1,0 +1,19 @@
+{
+  "case": "operations/invalid-id",
+  "description": "The path segment is not a valid identifier.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/-op",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": "invalid_request",
+      "message": "operation_id is invalid"
+    }
+  }
+}

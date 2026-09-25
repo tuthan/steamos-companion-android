@@ -1,0 +1,28 @@
+{
+  "case": "pair-request/verification-code-conflict",
+  "description": "A different client_id submits a nonce that is already bound to another client's request.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/request",
+    "headers": {
+      "X-SteamOS-Companion-TLS-Binding": "Zml4dHVyZS10bHMx"
+    },
+    "body": {
+      "verification_nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "client_name": "Android Tablet",
+      "client_id": "client-android-tablet",
+      "scopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ]
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "pairing_code_conflict",
+      "message": "pairing verification code is already in use"
+    }
+  }
+}

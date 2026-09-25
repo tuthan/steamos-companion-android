@@ -1,0 +1,1077 @@
+{
+  "protocol_version": 1,
+  "cases": [
+    {
+      "case": "discovery/ready",
+      "file": "discovery/ready.json",
+      "method": "GET",
+      "path": "/v1/discovery",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "discovery/tls-unavailable",
+      "file": "discovery/tls-unavailable.json",
+      "method": "GET",
+      "path": "/v1/discovery",
+      "status": 503,
+      "error": "tls_unavailable"
+    },
+    {
+      "case": "pair-request/verification-pending",
+      "file": "pair-request/verification-pending.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-request/verification-poll-pending",
+      "file": "pair-request/verification-poll-pending.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-request/verification-approved",
+      "file": "pair-request/verification-approved.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-request/verification-approved-repeat-poll",
+      "file": "pair-request/verification-approved-repeat-poll.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 404,
+      "error": "pairing_not_found"
+    },
+    {
+      "case": "pair-request/verification-consumed-after-host-reload",
+      "file": "pair-request/verification-consumed-after-host-reload.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 410,
+      "error": "pairing_consumed"
+    },
+    {
+      "case": "pair-request/verification-rejected",
+      "file": "pair-request/verification-rejected.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 409,
+      "error": "pairing_rejected"
+    },
+    {
+      "case": "pair-request/verification-cancelled",
+      "file": "pair-request/verification-cancelled.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 409,
+      "error": "pairing_cancelled"
+    },
+    {
+      "case": "pair-request/verification-expired",
+      "file": "pair-request/verification-expired.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 410,
+      "error": "pairing_expired"
+    },
+    {
+      "case": "pair-request/verification-session-required",
+      "file": "pair-request/verification-session-required.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 409,
+      "error": "pairing_session_required"
+    },
+    {
+      "case": "pair-request/verification-invalid-session",
+      "file": "pair-request/verification-invalid-session.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "pair-request/verification-code-conflict",
+      "file": "pair-request/verification-code-conflict.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 409,
+      "error": "pairing_code_conflict"
+    },
+    {
+      "case": "pair-request/verification-scope-conflict",
+      "file": "pair-request/verification-scope-conflict.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 409,
+      "error": "pairing_scope_conflict"
+    },
+    {
+      "case": "pair-request/channel-binding-mismatch",
+      "file": "pair-request/channel-binding-mismatch.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 401,
+      "error": "pairing_channel_mismatch"
+    },
+    {
+      "case": "pair-request/channel-binding-header-missing",
+      "file": "pair-request/channel-binding-header-missing.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 401,
+      "error": "pairing_channel_mismatch"
+    },
+    {
+      "case": "pair-request/transport-binding-unavailable",
+      "file": "pair-request/transport-binding-unavailable.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 503,
+      "error": "pairing_transport_unavailable"
+    },
+    {
+      "case": "pair-request/rate-limited",
+      "file": "pair-request/rate-limited.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 429,
+      "error": "rate_limited"
+    },
+    {
+      "case": "pair-request/queue-full",
+      "file": "pair-request/queue-full.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 429,
+      "error": "pairing_queue_full"
+    },
+    {
+      "case": "pair-request/advanced-pending",
+      "file": "pair-request/advanced-pending.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-request/advanced-approved",
+      "file": "pair-request/advanced-approved.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-request/advanced-invalid-secret",
+      "file": "pair-request/advanced-invalid-secret.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "pair-request/advanced-not-found",
+      "file": "pair-request/advanced-not-found.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 404,
+      "error": "pairing_not_found"
+    },
+    {
+      "case": "pair-request/advanced-unapproved-scope",
+      "file": "pair-request/advanced-unapproved-scope.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 403,
+      "error": "forbidden"
+    },
+    {
+      "case": "pair-request/advanced-client-conflict",
+      "file": "pair-request/advanced-client-conflict.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 409,
+      "error": "pairing_client_conflict"
+    },
+    {
+      "case": "pair-request/legacy-code-pending",
+      "file": "pair-request/legacy-code-pending.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-request/legacy-code-invalid",
+      "file": "pair-request/legacy-code-invalid.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "pair-request/ambiguous-bootstrap-form",
+      "file": "pair-request/ambiguous-bootstrap-form.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "pair-request/client-chosen-code-unsupported",
+      "file": "pair-request/client-chosen-code-unsupported.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 400,
+      "error": "pairing_method_unsupported"
+    },
+    {
+      "case": "pair-request/invalid-nonce",
+      "file": "pair-request/invalid-nonce.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "pair-request/malformed-json",
+      "file": "pair-request/malformed-json.json",
+      "method": "POST",
+      "path": "/v1/pair/request",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "pair-cancel/cancelled",
+      "file": "pair-cancel/cancelled.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-cancel/repeat-idempotent",
+      "file": "pair-cancel/repeat-idempotent.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-cancel/after-owner-rejection",
+      "file": "pair-cancel/after-owner-rejection.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-cancel/after-expiry",
+      "file": "pair-cancel/after-expiry.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "pair-cancel/unauthorized-client",
+      "file": "pair-cancel/unauthorized-client.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "pair-cancel/unauthorized-nonce",
+      "file": "pair-cancel/unauthorized-nonce.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "pair-cancel/invalid-session",
+      "file": "pair-cancel/invalid-session.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "pair-cancel/not-found",
+      "file": "pair-cancel/not-found.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 404,
+      "error": "pairing_not_found"
+    },
+    {
+      "case": "pair-cancel/already-approved",
+      "file": "pair-cancel/already-approved.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 409,
+      "error": "pairing_already_approved"
+    },
+    {
+      "case": "pair-cancel/after-delivery",
+      "file": "pair-cancel/after-delivery.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 404,
+      "error": "pairing_not_found"
+    },
+    {
+      "case": "pair-cancel/invalid-body",
+      "file": "pair-cancel/invalid-body.json",
+      "method": "POST",
+      "path": "/v1/pair/cancel",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "pair-revoke-self/accepted",
+      "file": "pair-revoke-self/accepted.json",
+      "method": "POST",
+      "path": "/v1/pair/revoke-self",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "pair-revoke-self/already-revoked",
+      "file": "pair-revoke-self/already-revoked.json",
+      "method": "POST",
+      "path": "/v1/pair/revoke-self",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "status/sunshine-disabled",
+      "file": "status/sunshine-disabled.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/sunshine-running",
+      "file": "status/sunshine-running.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/sunshine-stopped",
+      "file": "status/sunshine-stopped.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/sunshine-restarting",
+      "file": "status/sunshine-restarting.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/sunshine-unknown",
+      "file": "status/sunshine-unknown.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/sunshine-owner-unavailable",
+      "file": "status/sunshine-owner-unavailable.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/steam-bridge-unavailable",
+      "file": "status/steam-bridge-unavailable.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/steam-bridge-not-ready",
+      "file": "status/steam-bridge-not-ready.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/unauthorized-missing",
+      "file": "status/unauthorized-missing.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "status/unauthorized-invalid",
+      "file": "status/unauthorized-invalid.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "status/rate-limited",
+      "file": "status/rate-limited.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 429,
+      "error": "rate_limited"
+    },
+    {
+      "case": "display-outputs/available",
+      "file": "display-outputs/available.json",
+      "method": "GET",
+      "path": "/v1/display/outputs",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-outputs/with-profile",
+      "file": "display-outputs/with-profile.json",
+      "method": "GET",
+      "path": "/v1/display/outputs",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-outputs/with-active-preview",
+      "file": "display-outputs/with-active-preview.json",
+      "method": "GET",
+      "path": "/v1/display/outputs",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-outputs/bridge-unavailable",
+      "file": "display-outputs/bridge-unavailable.json",
+      "method": "GET",
+      "path": "/v1/display/outputs",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-outputs/unauthorized",
+      "file": "display-outputs/unauthorized.json",
+      "method": "GET",
+      "path": "/v1/display/outputs",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "display-order-get/available",
+      "file": "display-order-get/available.json",
+      "method": "GET",
+      "path": "/v1/display/order",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-order-get/saved-order",
+      "file": "display-order-get/saved-order.json",
+      "method": "GET",
+      "path": "/v1/display/order",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-order-get/saved-output-disconnected",
+      "file": "display-order-get/saved-output-disconnected.json",
+      "method": "GET",
+      "path": "/v1/display/order",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-order-get/unsupported-host",
+      "file": "display-order-get/unsupported-host.json",
+      "method": "GET",
+      "path": "/v1/display/order",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-order-get/ambiguous-connector",
+      "file": "display-order-get/ambiguous-connector.json",
+      "method": "GET",
+      "path": "/v1/display/order",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-order-get/no-physical-inventory",
+      "file": "display-order-get/no-physical-inventory.json",
+      "method": "GET",
+      "path": "/v1/display/order",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "display-order-set/saved-for-next-session",
+      "file": "display-order-set/saved-for-next-session.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-order-set/saved-and-restart-requested",
+      "file": "display-order-set/saved-and-restart-requested.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-order-set/restart-failed",
+      "file": "display-order-set/restart-failed.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-order-set/invalid-duplicate-keys",
+      "file": "display-order-set/invalid-duplicate-keys.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "display-order-set/invalid-output-key",
+      "file": "display-order-set/invalid-output-key.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "display-order-set/invalid-extra-field",
+      "file": "display-order-set/invalid-extra-field.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "display-order-set/stale-display-inventory",
+      "file": "display-order-set/stale-display-inventory.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 409,
+      "error": "stale_display_inventory"
+    },
+    {
+      "case": "display-order-set/stale-display-target",
+      "file": "display-order-set/stale-display-target.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 409,
+      "error": "stale_display_target"
+    },
+    {
+      "case": "display-order-set/ambiguous-display-identity",
+      "file": "display-order-set/ambiguous-display-identity.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 409,
+      "error": "ambiguous_display_identity"
+    },
+    {
+      "case": "display-order-set/gamescope-output-unsupported",
+      "file": "display-order-set/gamescope-output-unsupported.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 409,
+      "error": "gamescope_output_unsupported"
+    },
+    {
+      "case": "display-order-set/gamescope-output-update-failed",
+      "file": "display-order-set/gamescope-output-update-failed.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 409,
+      "error": "gamescope_output_update_failed"
+    },
+    {
+      "case": "display-order-set/mutation-conflict",
+      "file": "display-order-set/mutation-conflict.json",
+      "method": "POST",
+      "path": "/v1/display/order",
+      "status": 409,
+      "error": "mutation_conflict"
+    },
+    {
+      "case": "display-order-automatic/cleared",
+      "file": "display-order-automatic/cleared.json",
+      "method": "POST",
+      "path": "/v1/display/order/automatic",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-order-automatic/mutation-conflict",
+      "file": "display-order-automatic/mutation-conflict.json",
+      "method": "POST",
+      "path": "/v1/display/order/automatic",
+      "status": 409,
+      "error": "mutation_conflict"
+    },
+    {
+      "case": "display-order-automatic/gamescope-output-update-failed",
+      "file": "display-order-automatic/gamescope-output-update-failed.json",
+      "method": "POST",
+      "path": "/v1/display/order/automatic",
+      "status": 409,
+      "error": "gamescope_output_update_failed"
+    },
+    {
+      "case": "display-preview/accepted",
+      "file": "display-preview/accepted.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-preview/stale-target-generation",
+      "file": "display-preview/stale-target-generation.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 409,
+      "error": "stale_target"
+    },
+    {
+      "case": "display-preview/stale-target-output",
+      "file": "display-preview/stale-target-output.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 409,
+      "error": "stale_target"
+    },
+    {
+      "case": "display-preview/no-change",
+      "file": "display-preview/no-change.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 409,
+      "error": "no_change"
+    },
+    {
+      "case": "display-preview/mutation-conflict",
+      "file": "display-preview/mutation-conflict.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 409,
+      "error": "mutation_conflict"
+    },
+    {
+      "case": "display-preview/bridge-unavailable",
+      "file": "display-preview/bridge-unavailable.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 503,
+      "error": "bridge_unavailable"
+    },
+    {
+      "case": "display-preview/forbidden-scope",
+      "file": "display-preview/forbidden-scope.json",
+      "method": "POST",
+      "path": "/v1/display/preview",
+      "status": 403,
+      "error": "forbidden"
+    },
+    {
+      "case": "display-confirm/confirmed",
+      "file": "display-confirm/confirmed.json",
+      "method": "POST",
+      "path": "/v1/display/confirm",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-confirm/not-preview-owner",
+      "file": "display-confirm/not-preview-owner.json",
+      "method": "POST",
+      "path": "/v1/display/confirm",
+      "status": 403,
+      "error": "forbidden"
+    },
+    {
+      "case": "display-confirm/preview-not-found",
+      "file": "display-confirm/preview-not-found.json",
+      "method": "POST",
+      "path": "/v1/display/confirm",
+      "status": 409,
+      "error": "preview_not_found"
+    },
+    {
+      "case": "display-confirm/preview-expired",
+      "file": "display-confirm/preview-expired.json",
+      "method": "POST",
+      "path": "/v1/display/confirm",
+      "status": 409,
+      "error": "preview_expired"
+    },
+    {
+      "case": "display-confirm/readback-not-confirmed",
+      "file": "display-confirm/readback-not-confirmed.json",
+      "method": "POST",
+      "path": "/v1/display/confirm",
+      "status": 409,
+      "error": "readback_not_confirmed"
+    },
+    {
+      "case": "display-restore/verified-accepted",
+      "file": "display-restore/verified-accepted.json",
+      "method": "POST",
+      "path": "/v1/display/restore",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-restore/preview-accepted",
+      "file": "display-restore/preview-accepted.json",
+      "method": "POST",
+      "path": "/v1/display/restore",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-restore/preview-not-found",
+      "file": "display-restore/preview-not-found.json",
+      "method": "POST",
+      "path": "/v1/display/restore",
+      "status": 409,
+      "error": "preview_not_found"
+    },
+    {
+      "case": "display-restore/preview-expired",
+      "file": "display-restore/preview-expired.json",
+      "method": "POST",
+      "path": "/v1/display/restore",
+      "status": 409,
+      "error": "preview_expired"
+    },
+    {
+      "case": "display-restore/profile-not-found",
+      "file": "display-restore/profile-not-found.json",
+      "method": "POST",
+      "path": "/v1/display/restore",
+      "status": 409,
+      "error": "profile_not_found"
+    },
+    {
+      "case": "display-save-current/saved",
+      "file": "display-save-current/saved.json",
+      "method": "POST",
+      "path": "/v1/display/save-current",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "display-save-current/visible-false",
+      "file": "display-save-current/visible-false.json",
+      "method": "POST",
+      "path": "/v1/display/save-current",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "display-save-current/mutation-conflict",
+      "file": "display-save-current/mutation-conflict.json",
+      "method": "POST",
+      "path": "/v1/display/save-current",
+      "status": 409,
+      "error": "mutation_conflict"
+    },
+    {
+      "case": "display-save-current/stale-target",
+      "file": "display-save-current/stale-target.json",
+      "method": "POST",
+      "path": "/v1/display/save-current",
+      "status": 409,
+      "error": "stale_target"
+    },
+    {
+      "case": "display-save-current/readback-not-confirmed",
+      "file": "display-save-current/readback-not-confirmed.json",
+      "method": "POST",
+      "path": "/v1/display/save-current",
+      "status": 409,
+      "error": "readback_not_confirmed"
+    },
+    {
+      "case": "display-save-current/bridge-unavailable",
+      "file": "display-save-current/bridge-unavailable.json",
+      "method": "POST",
+      "path": "/v1/display/save-current",
+      "status": 503,
+      "error": "bridge_unavailable"
+    },
+    {
+      "case": "power/accepted",
+      "file": "power/accepted.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "power/idempotent-replay",
+      "file": "power/idempotent-replay.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "power/request-id-conflict",
+      "file": "power/request-id-conflict.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 409,
+      "error": "request_id_conflict"
+    },
+    {
+      "case": "power/mutation-conflict",
+      "file": "power/mutation-conflict.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 409,
+      "error": "mutation_conflict"
+    },
+    {
+      "case": "power/bridge-unavailable",
+      "file": "power/bridge-unavailable.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 503,
+      "error": "bridge_unavailable"
+    },
+    {
+      "case": "power/forbidden-scope",
+      "file": "power/forbidden-scope.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 403,
+      "error": "forbidden"
+    },
+    {
+      "case": "power/invalid-action",
+      "file": "power/invalid-action.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "sunshine-restart/accepted",
+      "file": "sunshine-restart/accepted.json",
+      "method": "POST",
+      "path": "/v1/sunshine/restart",
+      "status": 202,
+      "error": null
+    },
+    {
+      "case": "sunshine-restart/provider-unavailable",
+      "file": "sunshine-restart/provider-unavailable.json",
+      "method": "POST",
+      "path": "/v1/sunshine/restart",
+      "status": 409,
+      "error": "provider_unavailable"
+    },
+    {
+      "case": "sunshine-restart/state-not-stopped",
+      "file": "sunshine-restart/state-not-stopped.json",
+      "method": "POST",
+      "path": "/v1/sunshine/restart",
+      "status": 409,
+      "error": "state_not_stopped"
+    },
+    {
+      "case": "operations/accepted",
+      "file": "operations/accepted.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/power-observed-return",
+      "file": "operations/power-observed-return.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/power-failed",
+      "file": "operations/power-failed.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/power-unknown-after-host-reload",
+      "file": "operations/power-unknown-after-host-reload.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/display-preview-observed-return",
+      "file": "operations/display-preview-observed-return.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/display-restore-succeeded",
+      "file": "operations/display-restore-succeeded.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0002xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/sunshine-restart-succeeded",
+      "file": "operations/sunshine-restart-succeeded.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/not-found-missing",
+      "file": "operations/not-found-missing.json",
+      "method": "GET",
+      "path": "/v1/operations/op-unknown",
+      "status": 404,
+      "error": "operation_not_found"
+    },
+    {
+      "case": "operations/not-found-owned-by-other",
+      "file": "operations/not-found-owned-by-other.json",
+      "method": "GET",
+      "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+      "status": 404,
+      "error": "operation_not_found"
+    },
+    {
+      "case": "operations/invalid-id",
+      "file": "operations/invalid-id.json",
+      "method": "GET",
+      "path": "/v1/operations/-op",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "operations/unauthorized",
+      "file": "operations/unauthorized.json",
+      "method": "GET",
+      "path": "/v1/operations/op-unknown",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "unsupported/unknown-path-post",
+      "file": "unsupported/unknown-path-post.json",
+      "method": "POST",
+      "path": "/v1/shell",
+      "status": 404,
+      "error": "not_found"
+    },
+    {
+      "case": "unsupported/unknown-path-get-unauthenticated",
+      "file": "unsupported/unknown-path-get-unauthenticated.json",
+      "method": "GET",
+      "path": "/v1/shell",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "unsupported/unknown-path-get-authenticated",
+      "file": "unsupported/unknown-path-get-authenticated.json",
+      "method": "GET",
+      "path": "/v1/shell",
+      "status": 404,
+      "error": "not_found"
+    },
+    {
+      "case": "unsupported/non-v1-path",
+      "file": "unsupported/non-v1-path.json",
+      "method": "GET",
+      "path": "/status",
+      "status": 404,
+      "error": "not_found"
+    },
+    {
+      "case": "unsupported/query-string",
+      "file": "unsupported/query-string.json",
+      "method": "GET",
+      "path": "/v1/status?verbose=1",
+      "status": 400,
+      "error": "invalid_request"
+    },
+    {
+      "case": "unsupported/post-on-get-route",
+      "file": "unsupported/post-on-get-route.json",
+      "method": "POST",
+      "path": "/v1/status",
+      "status": 404,
+      "error": "not_found"
+    },
+    {
+      "case": "unsupported/get-on-post-route-unauthenticated",
+      "file": "unsupported/get-on-post-route-unauthenticated.json",
+      "method": "GET",
+      "path": "/v1/power",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "case": "unsupported/get-on-power-route-authenticated",
+      "file": "unsupported/get-on-power-route-authenticated.json",
+      "method": "GET",
+      "path": "/v1/power",
+      "status": 500,
+      "error": "internal_error"
+    },
+    {
+      "case": "unsupported/options-method",
+      "file": "unsupported/options-method.json",
+      "method": "OPTIONS",
+      "path": "/v1/status",
+      "status": 405,
+      "error": "method_not_allowed"
+    }
+  ]
+}

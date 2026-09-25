@@ -1,0 +1,30 @@
+{
+  "case": "pair-revoke-self/accepted",
+  "description": "Client revokes its own credential; the operation completes synchronously.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/pair/revoke-self",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "revoke-self-1"
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "protocol_version": 1,
+      "operation": {
+        "id": "op-fixture0001xxxxxxxxxxxxx",
+        "request_id": "revoke-self-1",
+        "state": "succeeded",
+        "kind": "pair.revoke-self",
+        "created_at": "2026-09-13T12:00:00.250000Z",
+        "updated_at": "2026-09-13T12:00:00.250000Z",
+        "outcome": "revoked",
+        "reason": null
+      }
+    }
+  }
+}

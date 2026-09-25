@@ -1,0 +1,22 @@
+{
+  "case": "power/request-id-conflict",
+  "description": "The request_id was already used with a different body.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/power",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "power-1",
+      "action": "restart"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": "request_id_conflict",
+      "message": "request_id was already used with a different body"
+    }
+  }
+}

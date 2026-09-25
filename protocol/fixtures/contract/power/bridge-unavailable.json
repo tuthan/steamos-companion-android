@@ -1,0 +1,22 @@
+{
+  "case": "power/bridge-unavailable",
+  "description": "No Steam bridge snapshot advertises the power method.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/power",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": {
+      "request_id": "power-1",
+      "action": "suspend"
+    }
+  },
+  "response": {
+    "status": 503,
+    "body": {
+      "error": "bridge_unavailable",
+      "message": "Steam suspend bridge is unavailable"
+    }
+  }
+}

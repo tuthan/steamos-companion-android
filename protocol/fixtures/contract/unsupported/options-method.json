@@ -1,0 +1,17 @@
+{
+  "case": "unsupported/options-method",
+  "description": "OPTIONS on any path.",
+  "request": {
+    "method": "OPTIONS",
+    "path": "/v1/status",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 405,
+    "body": {
+      "error": "method_not_allowed",
+      "message": "method is not supported"
+    }
+  }
+}

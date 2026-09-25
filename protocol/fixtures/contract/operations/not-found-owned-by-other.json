@@ -1,0 +1,19 @@
+{
+  "case": "operations/not-found-owned-by-other",
+  "description": "The operation exists but belongs to another paired client.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/operations/op-fixture0001xxxxxxxxxxxxx",
+    "headers": {
+      "Authorization": "Bearer fixture-token-0004-xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": "operation_not_found",
+      "message": "operation is not available to this credential"
+    }
+  }
+}
