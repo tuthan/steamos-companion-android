@@ -7,6 +7,7 @@ Source plan: `steamos-companion/android/phases/07-live-onboarding-and-status.md`
 ## Implemented so far
 
 - A paired status reader uses the saved endpoint, certificate pin, and bearer. It verifies the response host ID, checks that the active pairing is still the one used for the request, and persists a changed boot ID. Outputs and display order are read only after a successful status read.
+- The reader now tries active LAN paths in order, preferring the stored Wake interface when present. If no path succeeds and one reports a certificate mismatch, the result requires re-pairing. Dependent output/order reads use the same successful path.
 - The single foreground `StatusPoller` has a two-second success cadence and six-second failure cadence after each completed cycle. Manual refresh coalesces during an in-flight read. Stopping cancels its work and clock. A one-second monotonic tick marks a read stale at 15 seconds; unreachable takes headline precedence without erasing stale state.
 - A paired Android network callback invalidates discovery and requests one fresh status read. It exposes a hook to re-evaluate the Wake interface. It sends no mutation.
 - The network monitor deduplicates the initial capability/link callbacks for each available network, then reacts to actual transport or link-address changes and losses. This prevents a single registration burst from repeatedly cancelling its own fresh read.
@@ -33,5 +34,6 @@ Source plan: `steamos-companion/android/phases/07-live-onboarding-and-status.md`
 - `./gradlew --offline :core:test :app:compileBaselineDebugKotlin :app:compileTarget37DebugKotlin` — passed after the repair/removal and deadline-anchor changes.
 - `./gradlew --offline :core:test :app:testBaselineDebugUnitTest :app:testTarget37DebugUnitTest` — passed after the monotonic pairing-deadline change and the no-background-polling assertion.
 - `./gradlew --offline :app:compileBaselineDebugKotlin :app:compileTarget37DebugKotlin` — passed after the network callback update.
+- `./gradlew --offline :app:compileBaselineDebugKotlin :app:compileTarget37DebugKotlin` — passed after the multi-path status reader update.
 
 These are JVM/build checks, not live-device or rendered-screen evidence.
