@@ -2,11 +2,14 @@ package io.github.tuthan.steamoscompanion.core.pairing
 
 import io.github.tuthan.steamoscompanion.core.client.CandidatePhase
 import io.github.tuthan.steamoscompanion.core.client.EncryptedStateRepository
+import io.github.tuthan.steamoscompanion.core.client.MemoryStateStore
+import io.github.tuthan.steamoscompanion.core.client.JvmAesGcmStateCipher
 import io.github.tuthan.steamoscompanion.core.client.PairingStateTransactions
 import io.github.tuthan.steamoscompanion.core.client.StateCommitResult
 import io.github.tuthan.steamoscompanion.core.client.StateLoadResult
 import io.github.tuthan.steamoscompanion.core.client.testActiveHost
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.Clock
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.ports.SocketFactory
 import io.github.tuthan.steamoscompanion.core.protocol.ApiReply
@@ -21,6 +24,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.jsonObject
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.DiscoveryProbeResult
 import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
+import io.github.tuthan.steamoscompanion.core.transport.ResponseTiming
 import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
 import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
@@ -28,6 +32,9 @@ import io.github.tuthan.steamoscompanion.core.transport.PinnedHttpTransport
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.Socket
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -40,6 +47,45 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PairingCoordinatorTest {
+    @Test
+    fun pendingPairingGetsHostDeadlineAnchorOnlyFromFreshTimedReply() {
+        val base = TEST_NOW * 1_000_000L
+        val date = DateTimeFormatter.RFC_1123_DATE_TIME.format(Instant.ofEpochMilli(TEST_NOW).atZone(ZoneOffset.UTC))
+        val rig = rig({ _, _, _ ->
+            pendingReply(expiresAtMillis = TEST_NOW + 90_000)
+                .copy(timing = ResponseTiming(base, base + 250_000_000L, date))
+        })
+        val pending = rig.coordinator.startNonce(discovery()).join() as PairingAction.Pending
+        assertTrue(pending.deadlineAnchor != null)
+        assertTrue(pending.deadlineAnchor!!.remainingSeconds(base + 250_000_000L) in 88L..89L)
+        val restored = PairingCoordinator(
+            rig.repository, PairingStateTransactions(rig.repository), rig.clock, rig.gateway,
+            executor = java.util.concurrent.Executor { it.run() },
+        ).resume().join() as PairingAction.Pending
+        assertNull(restored.deadlineAnchor)
+    }
+
+    @Test
+    fun backwardPhoneClockCannotExtendPendingPairingInCurrentProcess() {
+        val clock = object : Clock {
+            var wall = TEST_NOW
+            var elapsed = 0L
+            override fun wallTimeMillis() = wall
+            override fun monotonicNanos() = elapsed
+        }
+        val repository = EncryptedStateRepository(MemoryStateStore(), JvmAesGcmStateCipher())
+        val gateway = ScriptedPairingGateway { _, _, _ -> pendingReply(expiresAtMillis = TEST_NOW + 90_000) }
+        val coordinator = PairingCoordinator(
+            repository, PairingStateTransactions(repository), clock, gateway,
+            executor = java.util.concurrent.Executor { it.run() },
+        )
+        val pending = coordinator.startNonce(discovery()).join() as PairingAction.Pending
+        clock.wall -= 3_600_000
+        clock.elapsed += 91_000_000_000L
+        assertTrue(coordinator.poll(pending.candidate.generation).join() is PairingAction.Expired)
+        assertEquals(1, gateway.requests.size)
+    }
+
     @Test
     fun persistsRequestBeforeNetworkAndPendingIdentityBeforePollThenRestartsAndCancels() {
         lateinit var repository: EncryptedStateRepository

@@ -52,7 +52,8 @@ class StatusPollerTest {
             assertEquals(1, maximum.get())
             poller.stop()
             poller.refresh()
-            Thread.sleep(100)
+            // Wait beyond the connected cadence to prove ON_STOP removed the scheduled cycle.
+            Thread.sleep(StatusPoller.CONNECTED_DELAY_MS + 250)
             assertEquals(2, calls.get())
         } finally { poller.close() }
     }
