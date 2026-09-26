@@ -20,6 +20,7 @@ Source plan: `steamos-companion/android/phases/07-live-onboarding-and-status.md`
 ## Remaining plan requirements
 
 - Phase 06 production Compose screens, ViewModels, screenshot and accessibility gates are incomplete; their dependency review is pending an explicit human disposition. The poller has no paired-graph `ON_START`/`ON_STOP` owner or rendered UI yet.
+- A fresh read-only Socket lookup of `pkg:maven/androidx.compose/compose-bom@2026.09.00` on 2026-09-26 again returned `404 / no result` for deep scores. No repository data was uploaded and no dependency was added. The dependency-guard decision remains `block_pending_human_review`.
 - Live discovery, manual address, QR capture/paste, candidate details, both pairing variants, approval outcomes, alias/address/find-again, revoke/Forget, and runtime permission launchers are not connected to screens. Find-again, local-alias, revoke, and Forget primitives are present, but their UI is not.
 - The host deadline anchor is not yet consumed by the pairing/preview UI. After process restoration the UI must show Checking, obtain a fresh host deadline, and disable deadline-sensitive confirmation when no anchor can be made.
 - Physical-phone pairing, status and revoke, process/network interruption, permission, and failure-matrix checks have not run. A3 cannot pass without that device evidence.
