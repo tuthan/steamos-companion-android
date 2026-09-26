@@ -36,6 +36,39 @@ import org.junit.runner.RunWith
 /** Exercises the Phase 07 reader against pinned TLS and the production Android state store. */
 @RunWith(AndroidJUnit4::class)
 class Phase07StatusGatewayTest {
+    @Test fun lostRevokeReplyKeepsCredentialUntilExplicitForget() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        val repository = AndroidAtomicStateStore.createRepository(context)
+        repository.reset()
+        FakeHost(assets).use { host ->
+            try {
+                host.default("POST", "/v1/pair/revoke-self", FakeHost.Reply.Lost)
+                val paired = activeHost(host)
+                assertTrue(repository.transact { it.copy(activeHost = paired) } is StateCommitResult.Saved)
+                val network = loopbackNetwork(host)
+                val transport = PinnedHttpTransport(AndroidClock(), network, AndroidSocketFactory())
+                val removal = ConnectionRemoval(OperationJournal(repository, AndroidClock()), PairingStateTransactions(repository))
+                val sent = removal.revoke(paired, JournalMutationSender { selected, request, _ ->
+                    transport.execute(
+                        TransportTarget(HostEndpoint.parse(selected.endpoint), network.activeLanPaths().single()),
+                        selected.certificatePin, request,
+                    )
+                }) as JournalDispatchResult.Finished
+
+                assertEquals(JournalPhase.UNKNOWN, sent.entry.phase)
+                val uncertain = (repository.load() as StateLoadResult.Ready).state
+                assertEquals(paired, uncertain.activeHost)
+                assertEquals(JournalPhase.UNKNOWN, uncertain.journal.single().phase)
+                assertTrue(removal.forgetOnThisDevice(paired) is StateCommitResult.Saved)
+                val forgotten = (repository.load() as StateLoadResult.Ready).state
+                assertEquals(null, forgotten.activeHost)
+                assertTrue(forgotten.journal.isEmpty())
+                host.assertHealthy()
+            } finally { repository.reset() }
+        }
+    }
+
     @Test fun journaledRevokeClearsCredentialOnlyAfterMatchingHostOperation() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
