@@ -93,6 +93,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
 

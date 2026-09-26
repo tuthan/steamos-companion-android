@@ -70,7 +70,7 @@ Candidates for later phases stay out of the catalog until reviewed in their phas
 ## Barcode decoder
 
 <!-- barcode:begin -->
-**ZXing Core 3.5.4 is the decoder.** It is pure Java, Apache-2.0, has no runtime dependencies and no Play Services, and works offline. The bundled ML Kit scanner (17.3.0) was rejected on policy rather than size: its dependency graph includes Google's datatransport/Firebase logging components, which send usage telemetry unless disabled. That conflicts with the specification's "no analytics, no third-party network calls" rule. The release-APK size of ZXing with R8 is measured when the scanner code lands; ML Kit was not measured because the telemetry rule excludes it.
+**ZXing Core 3.5.4 is the decoder.** It is pure Java, Apache-2.0, has no runtime dependencies and no Play Services, and works offline. The bundled ML Kit scanner (17.3.0) was rejected on policy rather than size: its dependency graph includes Google's datatransport/Firebase logging components, which send usage telemetry unless disabled. That conflicts with the specification's "no analytics, no third-party network calls" rule. The Phase 07 Camera2 adapter now uses ZXing, but no production screen references it yet. R8 removes the adapter and ZXing from the current release APK, so its size is not a valid scanner-size measurement; measure once the scanner screen roots it. ML Kit was not measured because the telemetry rule excludes it.
 <!-- barcode:end -->
 
 ## Release channel (before A6)
