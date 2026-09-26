@@ -1,0 +1,1329 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "screen": "onboarding",
+      "scenario": "unpaired_default",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/onboarding/unpaired_default.json"
+    },
+    {
+      "screen": "onboarding",
+      "scenario": "lan_permission_required",
+      "source": "design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/onboarding/lan_permission_required.json"
+    },
+    {
+      "screen": "onboarding",
+      "scenario": "nearby_permission_maybe_required",
+      "source": "design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/onboarding/nearby_permission_maybe_required.json"
+    },
+    {
+      "screen": "onboarding",
+      "scenario": "saved_pairing_unavailable",
+      "source": "design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/onboarding/saved_pairing_unavailable.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "searching",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/searching.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "one_result",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/one_result.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "multiple_results_stable_order",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/multiple_results_stable_order.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "no_results",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/no_results.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "no_local_network",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/no_local_network.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "partial_bounded_scan",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/partial_bounded_scan.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "failed_preserving_previous_results",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/failed_preserving_previous_results.json"
+    },
+    {
+      "screen": "discovery",
+      "scenario": "cancel_returns_immediately_discards_late_results",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/discovery/cancel_returns_immediately_discards_late_results.json"
+    },
+    {
+      "screen": "manual_address",
+      "scenario": "empty_fields",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/manual_address/empty_fields.json"
+    },
+    {
+      "screen": "manual_address",
+      "scenario": "field_validation_error",
+      "source": "flows §4, §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/manual_address/field_validation_error.json"
+    },
+    {
+      "screen": "manual_address",
+      "scenario": "checking_device",
+      "source": "flows §4",
+      "contractFixtures": [],
+      "resourcePath": "phase06/manual_address/checking_device.json"
+    },
+    {
+      "screen": "manual_address",
+      "scenario": "probe_failed_preserves_input",
+      "source": "flows §4, §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/manual_address/probe_failed_preserves_input.json"
+    },
+    {
+      "screen": "candidate_details",
+      "scenario": "untrusted_identity_and_requested_scopes",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/candidate_details/untrusted_identity_and_requested_scopes.json"
+    },
+    {
+      "screen": "candidate_details",
+      "scenario": "request_pairing_busy",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/candidate_details/request_pairing_busy.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "permission_prompt",
+      "source": "phase 06 plan: scanner UI",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/permission_prompt.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "camera_permission_denied",
+      "source": "phase 06 plan: scanner failure case",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/camera_permission_denied.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "scanning_fixture_viewfinder",
+      "source": "phase 06 plan: scanner UI; no live camera integration",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/scanning_fixture_viewfinder.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "unrecognized_payload",
+      "source": "phase 06 plan: QR payload validation",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/unrecognized_payload.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "malformed_or_unsupported_payload",
+      "source": "phase 06 plan: QR payload validation",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/malformed_or_unsupported_payload.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "expired_payload",
+      "source": "phase 06 plan: QR payload expiry",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/expired_payload.json"
+    },
+    {
+      "screen": "scanner",
+      "scenario": "payload_detected_target_summary",
+      "source": "phase 06 plan: QR payload pairing screen",
+      "contractFixtures": [],
+      "resourcePath": "phase06/scanner/payload_detected_target_summary.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_code_waiting",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/verification_code_waiting.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_code_200_reflow",
+      "source": "design-profile: AD5, R5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/verification_code_200_reflow.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_code_mismatch_hint",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/verification_code_mismatch_hint.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "payload_waiting_without_comparison_code",
+      "source": "phase 06 plan: QR payload",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/payload_waiting_without_comparison_code.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_approved_continue_to_remote",
+      "source": "flows §5, protocol fixture: verification-approved",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/verification_approved_continue_to_remote.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "approved_pair_status_timeout_keeps_pairing",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/approved_pair_status_timeout_keeps_pairing.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "payload_request_approved",
+      "source": "protocol fixture: advanced-approved",
+      "contractFixtures": [
+        "pair-request/advanced-approved.json"
+      ],
+      "resourcePath": "phase06/pairing/payload_request_approved.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "payload_request_pending",
+      "source": "protocol fixture: advanced-pending",
+      "contractFixtures": [
+        "pair-request/advanced-pending.json"
+      ],
+      "resourcePath": "phase06/pairing/payload_request_pending.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "request_explicitly_cancelled_local_record_may_remain",
+      "source": "flows §5, protocol fixture: verification-cancelled",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/request_explicitly_cancelled_local_record_may_remain.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "approval_raced_with_local_cancel",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/approval_raced_with_local_cancel.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "request_reply_not_confirmed",
+      "source": "design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/request_reply_not_confirmed.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "credential_delivery_or_save_unresolved",
+      "source": "design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/credential_delivery_or_save_unresolved.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "temporary_network_loss",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/temporary_network_loss.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "rate_limited",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/rate_limited.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "rejected",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/rejected.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "expired",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/expired.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "certificate_changed",
+      "source": "flows §5, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/certificate_changed.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "capacity_unavailable",
+      "source": "flows §5",
+      "contractFixtures": [],
+      "resourcePath": "phase06/pairing/capacity_unavailable.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "transport_channel_binding_unavailable",
+      "source": "protocol fixture: transport-binding-unavailable",
+      "contractFixtures": [
+        "pair-request/transport-binding-unavailable.json"
+      ],
+      "resourcePath": "phase06/pairing/transport_channel_binding_unavailable.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_code_conflict",
+      "source": "protocol fixture: verification-code-conflict",
+      "contractFixtures": [
+        "pair-request/verification-code-conflict.json"
+      ],
+      "resourcePath": "phase06/pairing/verification_code_conflict.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_consumed_after_host_reload",
+      "source": "protocol fixture: verification-consumed-after-host-reload",
+      "contractFixtures": [
+        "pair-request/verification-consumed-after-host-reload.json"
+      ],
+      "resourcePath": "phase06/pairing/verification_consumed_after_host_reload.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "verification_scope_conflict",
+      "source": "protocol fixture: verification-scope-conflict",
+      "contractFixtures": [
+        "pair-request/verification-scope-conflict.json"
+      ],
+      "resourcePath": "phase06/pairing/verification_scope_conflict.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "pairing_session_invalid_or_missing",
+      "source": "protocol fixtures: verification-invalid-session, verification-session-required",
+      "contractFixtures": [
+        "pair-request/verification-invalid-session.json",
+        "pair-request/verification-session-required.json"
+      ],
+      "resourcePath": "phase06/pairing/pairing_session_invalid_or_missing.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "pairing_nonce_or_body_invalid",
+      "source": "protocol fixtures: invalid-nonce, malformed-json",
+      "contractFixtures": [
+        "pair-request/invalid-nonce.json",
+        "pair-request/malformed-json.json"
+      ],
+      "resourcePath": "phase06/pairing/pairing_nonce_or_body_invalid.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "payload_invalid_or_not_found",
+      "source": "protocol fixtures: advanced-invalid-secret, advanced-not-found",
+      "contractFixtures": [
+        "pair-request/advanced-invalid-secret.json",
+        "pair-request/advanced-not-found.json"
+      ],
+      "resourcePath": "phase06/pairing/payload_invalid_or_not_found.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "payload_scope_rejected",
+      "source": "protocol fixture: advanced-unapproved-scope",
+      "contractFixtures": [
+        "pair-request/advanced-unapproved-scope.json"
+      ],
+      "resourcePath": "phase06/pairing/payload_scope_rejected.json"
+    },
+    {
+      "screen": "pairing",
+      "scenario": "payload_client_conflict",
+      "source": "protocol fixture: advanced-client-conflict",
+      "contractFixtures": [
+        "pair-request/advanced-client-conflict.json"
+      ],
+      "resourcePath": "phase06/pairing/payload_client_conflict.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "first_read",
+      "source": "flows §7",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/first_read.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "connected_fresh",
+      "source": "flows §6, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/connected_fresh.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "status_stale",
+      "source": "flows §7, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/status_stale.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "last_read_failed_unreachable",
+      "source": "flows §7, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/last_read_failed_unreachable.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "remote_status_rate_limited",
+      "source": "protocol fixture: status/rate-limited",
+      "contractFixtures": [
+        "status/rate-limited.json"
+      ],
+      "resourcePath": "phase06/remote_overview/remote_status_rate_limited.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "steam_bridge_unavailable",
+      "source": "flows §7, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/steam_bridge_unavailable.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "steam_bridge_not_ready",
+      "source": "protocol fixture: status/steam-bridge-not-ready",
+      "contractFixtures": [
+        "status/steam-bridge-not-ready.json"
+      ],
+      "resourcePath": "phase06/remote_overview/steam_bridge_not_ready.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "credential_rejected",
+      "source": "flows §7, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/credential_rejected.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "device_identity_changed",
+      "source": "flows §7, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/device_identity_changed.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "local_backend_unavailable",
+      "source": "flows §7, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/local_backend_unavailable.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "permission_denied_for_capability",
+      "source": "flows §7",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/permission_denied_for_capability.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "capability_unverified_or_unsupported",
+      "source": "design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/capability_unverified_or_unsupported.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "active_preview_recovery_card",
+      "source": "flows §6, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/active_preview_recovery_card.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "unresolved_action_card",
+      "source": "flows §6, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/unresolved_action_card.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "operation_history_full",
+      "source": "flows §7, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/operation_history_full.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "no_recovery_mode_saved",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/no_recovery_mode_saved.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "mutation_requested",
+      "source": "flows §13, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/mutation_requested.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "verified_action_result",
+      "source": "flows §13, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/verified_action_result.json"
+    },
+    {
+      "screen": "remote_overview",
+      "scenario": "ambiguous_action_result",
+      "source": "flows §13, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/remote_overview/ambiguous_action_result.json"
+    },
+    {
+      "screen": "wake",
+      "scenario": "wake_not_configured",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/wake/wake_not_configured.json"
+    },
+    {
+      "screen": "wake",
+      "scenario": "sending_packet",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/wake/sending_packet.json"
+    },
+    {
+      "screen": "wake",
+      "scenario": "packet_sent_waiting_for_connection",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/wake/packet_sent_waiting_for_connection.json"
+    },
+    {
+      "screen": "wake",
+      "scenario": "device_connected",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/wake/device_connected.json"
+    },
+    {
+      "screen": "wake",
+      "scenario": "no_response_after_30_seconds",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/wake/no_response_after_30_seconds.json"
+    },
+    {
+      "screen": "wake",
+      "scenario": "packet_send_or_interface_failure",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/wake/packet_send_or_interface_failure.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "power_options",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/power_options.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "suspend_confirmation_cancel_first",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/suspend_confirmation_cancel_first.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "restart_confirmation_cancel_first",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/restart_confirmation_cancel_first.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "shutdown_confirmation_cancel_first",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/shutdown_confirmation_cancel_first.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "sending_action",
+      "source": "flows §8, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/sending_action.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "action_accepted",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/action_accepted.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "connection_lost_after_request_unconfirmed",
+      "source": "flows §8",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/connection_lost_after_request_unconfirmed.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "capability_unavailable",
+      "source": "flows §7",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/capability_unavailable.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "missing_power_scope",
+      "source": "flows §7",
+      "contractFixtures": [],
+      "resourcePath": "phase06/power/missing_power_scope.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "power_bridge_unavailable",
+      "source": "protocol fixture: power/bridge-unavailable",
+      "contractFixtures": [
+        "power/bridge-unavailable.json"
+      ],
+      "resourcePath": "phase06/power/power_bridge_unavailable.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "power_forbidden_scope",
+      "source": "protocol fixture: power/forbidden-scope",
+      "contractFixtures": [
+        "power/forbidden-scope.json"
+      ],
+      "resourcePath": "phase06/power/power_forbidden_scope.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "power_mutation_conflict",
+      "source": "protocol fixture: power/mutation-conflict",
+      "contractFixtures": [
+        "power/mutation-conflict.json"
+      ],
+      "resourcePath": "phase06/power/power_mutation_conflict.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "power_request_id_conflict",
+      "source": "protocol fixture: power/request-id-conflict",
+      "contractFixtures": [
+        "power/request-id-conflict.json"
+      ],
+      "resourcePath": "phase06/power/power_request_id_conflict.json"
+    },
+    {
+      "screen": "power",
+      "scenario": "power_operation_failed_or_unknown_after_reload",
+      "source": "protocol fixtures: operations/power-failed, power-unknown-after-host-reload",
+      "contractFixtures": [
+        "operations/power-failed.json",
+        "operations/power-unknown-after-host-reload.json"
+      ],
+      "resourcePath": "phase06/power/power_operation_failed_or_unknown_after_reload.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "monitoring_disabled",
+      "source": "flows §10",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/monitoring_disabled.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "provider_unavailable",
+      "source": "flows §10",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/provider_unavailable.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "unknown_or_stale",
+      "source": "flows §10",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/unknown_or_stale.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "running",
+      "source": "flows §10, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/running.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "restarting",
+      "source": "flows §10",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/restarting.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "stopped_recovery_available",
+      "source": "flows §10, design-profile: State vocabulary",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/stopped_recovery_available.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "recovery_requested",
+      "source": "flows §10",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/recovery_requested.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "recovery_failed_or_unknown",
+      "source": "flows §10",
+      "contractFixtures": [],
+      "resourcePath": "phase06/sunshine/recovery_failed_or_unknown.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "recovery_provider_unavailable",
+      "source": "protocol fixture: sunshine-restart/provider-unavailable",
+      "contractFixtures": [
+        "sunshine-restart/provider-unavailable.json"
+      ],
+      "resourcePath": "phase06/sunshine/recovery_provider_unavailable.json"
+    },
+    {
+      "screen": "sunshine",
+      "scenario": "recovery_rejected_when_not_stopped",
+      "source": "protocol fixture: sunshine-restart/state-not-stopped",
+      "contractFixtures": [
+        "sunshine-restart/state-not-stopped.json"
+      ],
+      "resourcePath": "phase06/sunshine/recovery_rejected_when_not_stopped.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "loading_outputs",
+      "source": "flows §7, §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/loading_outputs.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "no_outputs",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/no_outputs.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "single_output_current_and_saved_mode",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/single_output_current_and_saved_mode.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "multiple_outputs_selector",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/multiple_outputs_selector.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "current_mode_selected",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/current_mode_selected.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "valid_alternative_mode_selected",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/valid_alternative_mode_selected.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "refresh_rate_unknown",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/refresh_rate_unknown.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "display_bridge_unavailable",
+      "source": "flows §7, §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/display_bridge_unavailable.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "display_capability_unsupported",
+      "source": "flows §7, §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/display_capability_unsupported.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "stale_output_or_target_generation",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/stale_output_or_target_generation.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_stale_output",
+      "source": "protocol fixture: display-preview/stale-target-output",
+      "contractFixtures": [
+        "display-preview/stale-target-output.json"
+      ],
+      "resourcePath": "phase06/display/preview_stale_output.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_stale_generation",
+      "source": "protocol fixture: display-preview/stale-target-generation",
+      "contractFixtures": [
+        "display-preview/stale-target-generation.json"
+      ],
+      "resourcePath": "phase06/display/preview_stale_generation.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "another_operation_in_progress",
+      "source": "flows §7, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/another_operation_in_progress.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_applying",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_applying.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_no_change",
+      "source": "protocol fixture: display-preview/no-change",
+      "contractFixtures": [
+        "display-preview/no-change.json"
+      ],
+      "resourcePath": "phase06/display/preview_no_change.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_forbidden_scope_or_bridge_unavailable",
+      "source": "protocol fixtures: display-preview/forbidden-scope, bridge-unavailable",
+      "contractFixtures": [
+        "display-preview/forbidden-scope.json",
+        "display-preview/bridge-unavailable.json"
+      ],
+      "resourcePath": "phase06/display/preview_forbidden_scope_or_bridge_unavailable.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_active_countdown_and_revert_first",
+      "source": "flows §9, design-profile: R6",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_active_countdown_and_revert_first.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_keep_requested",
+      "source": "flows §9, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_keep_requested.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_keep_verified_readback",
+      "source": "flows §9, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_keep_verified_readback.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_keep_readback_unconfirmed",
+      "source": "flows §9, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_keep_readback_unconfirmed.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_confirmation_expired_or_not_found",
+      "source": "protocol fixtures: display-confirm/preview-expired, preview-not-found",
+      "contractFixtures": [
+        "display-confirm/preview-expired.json",
+        "display-confirm/preview-not-found.json"
+      ],
+      "resourcePath": "phase06/display/preview_confirmation_expired_or_not_found.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_confirmation_not_owner",
+      "source": "protocol fixture: display-confirm/not-preview-owner",
+      "contractFixtures": [
+        "display-confirm/not-preview-owner.json"
+      ],
+      "resourcePath": "phase06/display/preview_confirmation_not_owner.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_confirmation_readback_not_confirmed",
+      "source": "protocol fixture: display-confirm/readback-not-confirmed",
+      "contractFixtures": [
+        "display-confirm/readback-not-confirmed.json"
+      ],
+      "resourcePath": "phase06/display/preview_confirmation_readback_not_confirmed.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_revert_requested",
+      "source": "flows §9, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_revert_requested.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_reverted_verified",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_reverted_verified.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "preview_time_ended_checking_restoration",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/preview_time_ended_checking_restoration.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "connection_lost_during_preview",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/connection_lost_during_preview.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "restore_saved_requested",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/restore_saved_requested.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "restore_saved_verified",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/restore_saved_verified.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "restore_saved_failed_or_unconfirmed",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/restore_saved_failed_or_unconfirmed.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "restore_profile_not_found",
+      "source": "protocol fixture: display-restore/profile-not-found",
+      "contractFixtures": [
+        "display-restore/profile-not-found.json"
+      ],
+      "resourcePath": "phase06/display/restore_profile_not_found.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "restore_preview_expired_or_missing",
+      "source": "protocol fixtures: display-restore/preview-expired, preview-not-found",
+      "contractFixtures": [
+        "display-restore/preview-expired.json",
+        "display-restore/preview-not-found.json"
+      ],
+      "resourcePath": "phase06/display/restore_preview_expired_or_missing.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "no_recovery_profile",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/no_recovery_profile.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_visible_picture_confirmation",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_visible_picture_confirmation.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_confirmation_cancel_first",
+      "source": "flows §9, phase 06 plan: Cancel initially focused",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_confirmation_cancel_first.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_with_one_advertised_mode",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_with_one_advertised_mode.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_success_and_readback",
+      "source": "flows §9, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_success_and_readback.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_readback_unconfirmed",
+      "source": "flows §9, §13",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_readback_unconfirmed.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_stale_target",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_stale_target.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_bridge_unavailable",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_bridge_unavailable.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_mutation_conflict",
+      "source": "flows §9",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/save_current_mutation_conflict.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "save_current_requires_visible_true",
+      "source": "protocol fixtures: display-save-current/visible-false, readback-not-confirmed",
+      "contractFixtures": [
+        "display-save-current/visible-false.json",
+        "display-save-current/readback-not-confirmed.json"
+      ],
+      "resourcePath": "phase06/display/save_current_requires_visible_true.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "old_host_cannot_save_current",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/old_host_cannot_save_current.json"
+    },
+    {
+      "screen": "display",
+      "scenario": "could_not_confirm_display_recovery",
+      "source": "flows §9, phase 06 plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display/could_not_confirm_display_recovery.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "available_order",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/available_order.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "saved_order",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/saved_order.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "no_physical_inventory",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/no_physical_inventory.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "unsupported_host",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/unsupported_host.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "ambiguous_connector",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/ambiguous_connector.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "saved_output_disconnected",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/saved_output_disconnected.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "ambiguous_display_identity",
+      "source": "protocol fixture: display-order-set/ambiguous-display-identity",
+      "contractFixtures": [
+        "display-order-set/ambiguous-display-identity.json"
+      ],
+      "resourcePath": "phase06/display_order/ambiguous_display_identity.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "gamescope_output_unsupported",
+      "source": "protocol fixture: display-order-set/gamescope-output-unsupported",
+      "contractFixtures": [
+        "display-order-set/gamescope-output-unsupported.json"
+      ],
+      "resourcePath": "phase06/display_order/gamescope_output_unsupported.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "gamescope_output_update_failed",
+      "source": "protocol fixtures: display-order-set/gamescope-output-update-failed, display-order-automatic/gamescope-output-update-failed",
+      "contractFixtures": [
+        "display-order-set/gamescope-output-update-failed.json",
+        "display-order-automatic/gamescope-output-update-failed.json"
+      ],
+      "resourcePath": "phase06/display_order/gamescope_output_update_failed.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "stale_inventory",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/stale_inventory.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "mutation_conflict",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/mutation_conflict.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "stale_display_target",
+      "source": "protocol fixture: display-order-set/stale-display-target",
+      "contractFixtures": [
+        "display-order-set/stale-display-target.json"
+      ],
+      "resourcePath": "phase06/display_order/stale_display_target.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "invalid_duplicate_output_keys",
+      "source": "protocol fixture: display-order-set/invalid-duplicate-keys",
+      "contractFixtures": [
+        "display-order-set/invalid-duplicate-keys.json"
+      ],
+      "resourcePath": "phase06/display_order/invalid_duplicate_output_keys.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "invalid_output_key",
+      "source": "protocol fixture: display-order-set/invalid-output-key",
+      "contractFixtures": [
+        "display-order-set/invalid-output-key.json"
+      ],
+      "resourcePath": "phase06/display_order/invalid_output_key.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "invalid_extra_field",
+      "source": "protocol fixture: display-order-set/invalid-extra-field",
+      "contractFixtures": [
+        "display-order-set/invalid-extra-field.json"
+      ],
+      "resourcePath": "phase06/display_order/invalid_extra_field.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "saved_for_next_session",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/saved_for_next_session.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "save_and_restart_requested",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/save_and_restart_requested.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "save_and_restart_failed",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/save_and_restart_failed.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "automatic_order_cleared",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/automatic_order_cleared.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "automatic_order_failed",
+      "source": "remote display order plan",
+      "contractFixtures": [],
+      "resourcePath": "phase06/display_order/automatic_order_failed.json"
+    },
+    {
+      "screen": "display_order",
+      "scenario": "automatic_order_mutation_conflict",
+      "source": "protocol fixture: display-order-automatic/mutation-conflict",
+      "contractFixtures": [
+        "display-order-automatic/mutation-conflict.json"
+      ],
+      "resourcePath": "phase06/display_order/automatic_order_mutation_conflict.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "paired_identity_scopes_and_fingerprint",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/paired_identity_scopes_and_fingerprint.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "rename_local_alias",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/rename_local_alias.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "edit_address_validation_error",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/edit_address_validation_error.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "find_again_same_identity_address_updated",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/find_again_same_identity_address_updated.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "find_again_identity_changed",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/find_again_identity_changed.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "pair_another_device_staged_old_pairing_kept",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/pair_another_device_staged_old_pairing_kept.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "replace_pairing_confirmation_cancel_first",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/replace_pairing_confirmation_cancel_first.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "replacement_cancel_or_failure_keeps_old_pairing",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/replacement_cancel_or_failure_keeps_old_pairing.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "remove_access_and_forget_confirmation",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/remove_access_and_forget_confirmation.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "forget_on_device_only_confirmation",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/forget_on_device_only_confirmation.json"
+    },
+    {
+      "screen": "connection_details",
+      "scenario": "sanitized_diagnostics_export",
+      "source": "flows §11",
+      "contractFixtures": [],
+      "resourcePath": "phase06/connection_details/sanitized_diagnostics_export.json"
+    }
+  ]
+}

@@ -5,6 +5,8 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
+import org.json.JSONObject
 import org.bouncycastle.tls.ChannelBinding
 import org.bouncycastle.tls.CipherSuite
 import org.bouncycastle.tls.DefaultTlsClient
@@ -34,10 +36,17 @@ class PinnedTestClient(private val pinSha256: String) {
             val protocol = TlsClientProtocol(socket.getInputStream(), socket.getOutputStream())
             protocol.connect(client)
             val encoded = body?.toByteArray(Charsets.UTF_8) ?: ByteArray(0)
+            val requestHeaders = headers.toMutableMap()
+            val pairingSessionPresent = body?.let { runCatching { JSONObject(it).has("pairing_session") }.getOrDefault(false) } == true
+            if (method.equals("POST", ignoreCase = true) && path == "/v1/pair/request" && !pairingSessionPresent &&
+                requestHeaders.keys.none { it.equals("X-SteamOS-Companion-TLS-Binding", ignoreCase = true) }
+            ) {
+                requestHeaders["X-SteamOS-Companion-TLS-Binding"] = Base64.getUrlEncoder().encodeToString(client.tlsUnique())
+            }
             val head = buildString {
                 append("$method $path HTTP/1.1\r\n")
                 append("Host: ${address.hostString}:${address.port}\r\n")
-                headers.forEach { (name, value) -> append("$name: $value\r\n") }
+                requestHeaders.forEach { (name, value) -> append("$name: $value\r\n") }
                 if (body != null) append("Content-Type: application/json\r\nContent-Length: ${encoded.size}\r\n")
                 append("Connection: close\r\n\r\n")
             }

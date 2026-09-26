@@ -1,6 +1,7 @@
 package io.github.tuthan.steamoscompanion.core.transport
 
 import io.github.tuthan.steamoscompanion.core.ports.Clock
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.ports.SocketFactory
@@ -13,6 +14,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.HttpResponse
 import io.github.tuthan.steamoscompanion.core.protocol.ProtocolCodec
 import io.github.tuthan.steamoscompanion.core.protocol.RequestValidationException
 import io.github.tuthan.steamoscompanion.core.protocol.fingerprintMatches
+import java.io.Closeable
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -24,6 +26,7 @@ import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import java.util.Base64
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -61,7 +64,19 @@ sealed interface DiscoveryProbeResult {
     data class Failed(val failure: TransportFailure) : DiscoveryProbeResult
 }
 
-enum class TransportFailure { VALIDATION, PERMISSION, DNS, CONNECT, PIN, TLS12_REQUIRED, CANCELLED, TIMEOUT, IO, PROTOCOL }
+enum class TransportFailure {
+    VALIDATION,
+    PERMISSION,
+    LEGACY_PERMISSION_MAY_BE_REQUIRED,
+    DNS,
+    CONNECT,
+    PIN,
+    TLS12_REQUIRED,
+    CANCELLED,
+    TIMEOUT,
+    IO,
+    PROTOCOL,
+}
 
 sealed interface RequestOutcome {
     /** A 2xx response has been fully framed, parsed, and decoded. 202 still means accepted, not completed. */
@@ -100,11 +115,21 @@ class PinnedHttpTransport(
             return DiscoveryProbeResult.Failed(TransportFailure.CANCELLED)
         }
         val certificate = AtomicReference<ByteArray?>(null)
+        val permissionRevoked = AtomicBoolean(false)
+        var permissionWatch: Closeable? = null
         try {
+            permissionWatch = watchLocalNetworkPermission(scope, permissionRevoked)
+            requireLocalNetworkPermission()
+            scope.check()
             val address = resolve(target, scope)
+            requireLocalNetworkPermission()
+            scope.check()
             val raw = socketFactory.create()
             scope.attach(raw)
+            requireLocalNetworkPermission()
             networkAccess.bind(raw, target.network)
+            requireLocalNetworkPermission()
+            scope.check()
             raw.connect(InetSocketAddress(address, target.endpoint.port), scope.remainingMillis())
             scope.check()
             val tls = platformTls(raw, target.endpoint, null, certificate)
@@ -136,14 +161,18 @@ class PinnedHttpTransport(
                 }
             }
         } catch (_: RequestCancelledException) {
-            return DiscoveryProbeResult.Failed(TransportFailure.CANCELLED)
+            return DiscoveryProbeResult.Failed(
+                if (permissionRevoked.get()) TransportFailure.PERMISSION else TransportFailure.CANCELLED,
+            )
         } catch (_: RequestDeadlineExceededException) {
-            return DiscoveryProbeResult.Failed(TransportFailure.TIMEOUT)
+            return DiscoveryProbeResult.Failed(qualifyLegacyPermissionFailure(TransportFailure.TIMEOUT))
         } catch (_: SecurityException) {
-            return DiscoveryProbeResult.Failed(TransportFailure.PERMISSION)
+            return DiscoveryProbeResult.Failed(qualifyLegacyPermissionFailure(TransportFailure.PERMISSION))
         } catch (error: Exception) {
-            return DiscoveryProbeResult.Failed(classify(error, scope))
+            val failure = if (permissionRevoked.get()) TransportFailure.PERMISSION else classify(error, scope)
+            return DiscoveryProbeResult.Failed(qualifyLegacyPermissionFailure(failure))
         } finally {
+            runCatching { permissionWatch?.close() }
             scope.close()
         }
     }
@@ -196,11 +225,20 @@ class PinnedHttpTransport(
         val requestBytesMayHaveBeenSent = AtomicBoolean(false)
         var responseStatus: Int? = null
         var retryAfterMillis: Long? = null
+        val permissionRevoked = AtomicBoolean(false)
+        var permissionWatch: Closeable? = null
         try {
+            permissionWatch = watchLocalNetworkPermission(scope, permissionRevoked)
+            requireLocalNetworkPermission()
+            scope.check()
             val address = resolve(target, scope)
+            requireLocalNetworkPermission()
+            scope.check()
             val raw = socketFactory.create()
             scope.attach(raw)
+            requireLocalNetworkPermission()
             networkAccess.bind(raw, target.network)
+            requireLocalNetworkPermission()
             scope.check()
             raw.connect(InetSocketAddress(address, target.endpoint.port), scope.remainingMillis())
             scope.check()
@@ -229,18 +267,73 @@ class PinnedHttpTransport(
                 is ApiReply.Versioned -> RequestOutcome.Reply(decoded, response.status, retryAfterMillis)
             }
         } catch (_: RequestCancelledException) {
-            return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), TransportFailure.CANCELLED, responseStatus)
+            val failure = if (permissionRevoked.get()) TransportFailure.PERMISSION else TransportFailure.CANCELLED
+            return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), failure, responseStatus)
         } catch (_: RequestDeadlineExceededException) {
-            return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), TransportFailure.TIMEOUT, responseStatus)
+            return ambiguous(
+                initialPairing,
+                requestBytesMayHaveBeenSent.get(),
+                qualifyLegacyPermissionFailure(TransportFailure.TIMEOUT),
+                responseStatus,
+            )
         } catch (_: SecurityException) {
-            return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), TransportFailure.PERMISSION, responseStatus)
+            return ambiguous(
+                initialPairing,
+                requestBytesMayHaveBeenSent.get(),
+                qualifyLegacyPermissionFailure(TransportFailure.PERMISSION),
+                responseStatus,
+            )
         } catch (error: Exception) {
-            val failure = classify(error, scope)
+            val failure = qualifyLegacyPermissionFailure(
+                if (permissionRevoked.get()) TransportFailure.PERMISSION else classify(error, scope),
+            )
             return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), failure, responseStatus)
         } finally {
+            runCatching { permissionWatch?.close() }
             scope.close()
         }
     }
+
+    private fun watchLocalNetworkPermission(
+        scope: RequestDeadline,
+        permissionRevoked: AtomicBoolean,
+    ): Closeable {
+        val initial = networkAccess.localNetworkPermissionState()
+        fun cancelIfRevoked() {
+            val current = networkAccess.localNetworkPermissionState()
+            val lostGrant = current == LocalNetworkPermissionState.RequiredPermissionMissing ||
+                (initial == LocalNetworkPermissionState.Allowed &&
+                    current == LocalNetworkPermissionState.LegacyRestrictionUnknown)
+            if (lostGrant) {
+                permissionRevoked.set(true)
+                scope.cancel()
+            }
+        }
+
+        cancelIfRevoked()
+        val monitor = LOCAL_NETWORK_PERMISSION_MONITOR.scheduleWithFixedDelay(
+            ::cancelIfRevoked,
+            LOCAL_NETWORK_PERMISSION_POLL_MILLIS,
+            LOCAL_NETWORK_PERMISSION_POLL_MILLIS,
+            TimeUnit.MILLISECONDS,
+        )
+        return Closeable { monitor.cancel(false) }
+    }
+
+    private fun requireLocalNetworkPermission() {
+        if (networkAccess.localNetworkPermissionState() == LocalNetworkPermissionState.RequiredPermissionMissing) {
+            throw SecurityException("Local network permission is required before opening a socket")
+        }
+    }
+
+    private fun qualifyLegacyPermissionFailure(failure: TransportFailure): TransportFailure =
+        if (networkAccess.localNetworkPermissionState() == LocalNetworkPermissionState.LegacyRestrictionUnknown &&
+            failure in setOf(TransportFailure.TIMEOUT, TransportFailure.PERMISSION)
+        ) {
+            TransportFailure.LEGACY_PERMISSION_MAY_BE_REQUIRED
+        } else {
+            failure
+        }
 
     private fun resolve(target: TransportTarget, scope: RequestDeadline): InetAddress {
         val future = BoundedDnsExecutor.submit { networkAccess.resolve(target.endpoint.host, target.network) }
@@ -402,6 +495,10 @@ class PinnedHttpTransport(
         const val MIN_BINDING_BYTES = 12
         const val PIN_MISMATCH_MESSAGE = "Pinned server certificate does not match"
         private val PIN = Regex("sha256:[0-9a-f]{64}")
+        private const val LOCAL_NETWORK_PERMISSION_POLL_MILLIS = 100L
+        private val LOCAL_NETWORK_PERMISSION_MONITOR = Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, "companion-lan-permission-monitor").apply { isDaemon = true }
+        }
 
         private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
     }

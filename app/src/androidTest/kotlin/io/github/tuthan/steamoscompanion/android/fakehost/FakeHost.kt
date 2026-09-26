@@ -8,8 +8,11 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.math.BigInteger
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CopyOnWriteArrayList
@@ -17,7 +20,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.bouncycastle.crypto.util.PrivateKeyFactory
+import org.bouncycastle.crypto.generators.SCrypt
 import org.bouncycastle.tls.Certificate
+import org.bouncycastle.tls.AlertDescription
 import org.bouncycastle.tls.ChannelBinding
 import org.bouncycastle.tls.CipherSuite
 import org.bouncycastle.tls.DefaultTlsServer
@@ -26,6 +31,7 @@ import org.bouncycastle.tls.ProtocolVersion
 import org.bouncycastle.tls.SignatureAlgorithm
 import org.bouncycastle.tls.SignatureAndHashAlgorithm
 import org.bouncycastle.tls.TlsCredentialedSigner
+import org.bouncycastle.tls.TlsFatalAlertReceived
 import org.bouncycastle.tls.TlsServerProtocol
 import org.bouncycastle.tls.crypto.TlsCryptoParameters
 import org.bouncycastle.tls.crypto.impl.bc.BcDefaultTlsCredentialedSigner
@@ -60,9 +66,29 @@ class FakeHost(private val assets: AssetManager) : Closeable {
 
         /** Sends exact HTTP bytes for malformed/truncated framing checks. */
         data class Raw(val bytes: ByteArray) : Reply
+
+        /** Creates a pending response after independently deriving the nonce comparison code. */
+        data object PairingPending : Reply
+
+        /** Approves a nonce request and returns a credential bound to its client ID and scopes. */
+        data object PairingApproved : Reply
+
+        /** Approves a one-shot QR payload request and returns a credential immediately. */
+        data object PayloadPairingApproved : Reply
     }
 
-    data class Recorded(val method: String, val path: String, val headers: Map<String, String>, val body: String, val tlsUnique: ByteArray)
+    data class Recorded(
+        val method: String,
+        val path: String,
+        val headers: Map<String, String>,
+        val body: String,
+        val tlsUnique: ByteArray,
+        val tlsVersion: org.bouncycastle.tls.ProtocolVersion? = null,
+        val tlsCipherSuite: Int = 0,
+        val extendedMasterSecret: Boolean = false,
+        val resumedSession: Boolean = false,
+        val hostDerivedVerificationCode: String? = null,
+    )
 
     private val crypto = BcTlsCrypto(SecureRandom())
     private val certificateDer = assets.open("fake-host/cert.der").use(InputStream::readBytes)
@@ -73,6 +99,7 @@ class FakeHost(private val assets: AssetManager) : Closeable {
     private val failure = AtomicReference<Throwable?>(null)
 
     val requests = CopyOnWriteArrayList<Recorded>()
+    val tlsAlerts = CopyOnWriteArrayList<Int>()
     val address: InetSocketAddress get() = InetSocketAddress(server.inetAddress, server.localPort)
 
     /** Lowercase hex SHA-256 of the DER certificate, the value a client pins. */
@@ -115,28 +142,47 @@ class FakeHost(private val assets: AssetManager) : Closeable {
             protocol.accept(tlsServer)
             val request = readRequest(protocol.inputStream)
             val binding = tlsServer.tlsUnique()
-            requests += request.copy(tlsUnique = binding)
-            val reply = scripts[key(request.method, request.path)]?.pollFirst() ?: defaults[key(request.method, request.path)]
-            when (reply) {
-                Reply.Lost -> protocol.close()
-                Reply.DiscoveryCandidate -> respond(
-                    protocol,
-                    200,
-                    """{"protocol_version":1,"service":"steamos-companion","host_id":"host-fixture0001xxxxxxxxxxxxx","certificate_fingerprint":"sha256:$certificateSha256","name":"Fake Deck"}""",
-                )
-                is Reply.DelayedFixture -> {
-                    Thread.sleep(reply.delayMillis)
-                    respondWithFixture(protocol, reply.assetPath)
+            val security = tlsServer.securityParameters()
+            val recorded = request.copy(
+                tlsUnique = binding,
+                tlsVersion = security.negotiatedVersion,
+                tlsCipherSuite = security.cipherSuite,
+                extendedMasterSecret = security.isExtendedMasterSecret,
+                resumedSession = security.isResumedSession,
+                hostDerivedVerificationCode = deriveVerificationCode(request.body),
+            )
+            requests += recorded
+            if (isInitialPairingRequest(request) && !bindingMatches(request, binding)) {
+                respondWithFixture(protocol, "fixtures/contract/pair-request/channel-binding-mismatch.json")
+            } else {
+                val reply = scripts[key(request.method, request.path)]?.pollFirst() ?: defaults[key(request.method, request.path)]
+                when (reply) {
+                    Reply.Lost -> protocol.close()
+                    Reply.DiscoveryCandidate -> respond(
+                        protocol,
+                        200,
+                        """{"protocol_version":1,"service":"steamos-companion","host_id":"host-fixture0001xxxxxxxxxxxxx","certificate_fingerprint":"sha256:$certificateSha256","name":"Fake Deck"}""",
+                    )
+                    is Reply.DelayedFixture -> {
+                        Thread.sleep(reply.delayMillis)
+                        respondWithFixture(protocol, reply.assetPath)
+                    }
+                    is Reply.Raw -> {
+                        protocol.outputStream.write(reply.bytes)
+                        protocol.outputStream.flush()
+                        protocol.close()
+                    }
+                    Reply.PairingPending -> respondPairingPending(protocol, request)
+                    Reply.PairingApproved -> respondPairingApproved(protocol, request)
+                    Reply.PayloadPairingApproved -> respondPayloadPairingApproved(protocol, request)
+                    is Reply.Fixture -> respondWithFixture(protocol, reply.assetPath)
+                    is Reply.Body -> respond(protocol, reply.status, asset(reply.assetPath))
+                    null -> respondWithFixture(protocol, NOT_FOUND)
                 }
-                is Reply.Raw -> {
-                    protocol.outputStream.write(reply.bytes)
-                    protocol.outputStream.flush()
-                    protocol.close()
-                }
-                is Reply.Fixture -> respondWithFixture(protocol, reply.assetPath)
-                is Reply.Body -> respond(protocol, reply.status, asset(reply.assetPath))
-                null -> respondWithFixture(protocol, NOT_FOUND)
             }
+        } catch (error: TlsFatalAlertReceived) {
+            tlsAlerts.add(error.alertDescription.toInt())
+            if (error.alertDescription != AlertDescription.bad_certificate) failure.compareAndSet(null, error)
         } catch (error: Throwable) {
             failure.compareAndSet(null, error)
         }
@@ -167,6 +213,83 @@ class FakeHost(private val assets: AssetManager) : Closeable {
         protocol.close()
     }
 
+    private fun respondPairingPending(protocol: TlsServerProtocol, request: Recorded) {
+        val body = JSONObject(request.body)
+        check(body.has("verification_nonce") && !body.has("pairing_session"))
+        check(request.headers.containsKey(TLS_BINDING_HEADER))
+        val expiresAt = System.currentTimeMillis() / 1_000.0 + 120.0
+        val response = JSONObject()
+            .put("protocol_version", 1)
+            .put("state", "pending")
+            .put("pairing_id", PAIRING_ID)
+            .put("expires_at", expiresAt)
+            .put("pairing_session", PAIRING_SESSION)
+        respond(protocol, 200, response.toString())
+    }
+
+    private fun respondPairingApproved(protocol: TlsServerProtocol, request: Recorded) {
+        val body = JSONObject(request.body)
+        check(body.has("verification_nonce") && body.has("pairing_session"))
+        respond(protocol, 200, approvedBody(body, PAIRING_ID))
+    }
+
+    private fun respondPayloadPairingApproved(protocol: TlsServerProtocol, request: Recorded) {
+        val body = JSONObject(request.body)
+        check(body.has("pairing_id") && body.has("secret") && !body.has("verification_nonce"))
+        check(request.headers.containsKey(TLS_BINDING_HEADER))
+        respond(protocol, 200, approvedBody(body, body.getString("pairing_id")))
+    }
+
+    private fun approvedBody(request: JSONObject, pairingId: String): String {
+        val clientId = request.getString("client_id")
+        val scopes = request.getJSONArray("scopes")
+        val credential = JSONObject()
+            .put("client_id", clientId)
+            .put("token", TEST_BEARER_TOKEN)
+            .put("scopes", scopes)
+            .put("host_id", HOST_ID)
+        val wakeTarget = JSONObject()
+            .put("available", true)
+            .put("mac", "001122334455")
+            .put("interface", "wlan0")
+            .put("source_address", "192.168.50.24")
+            .put("reason", JSONObject.NULL)
+        return JSONObject()
+            .put("protocol_version", 1)
+            .put("state", "approved")
+            .put("pairing_id", pairingId)
+            .put("host_id", HOST_ID)
+            .put("credential", credential)
+            .put("wake_target", wakeTarget)
+            .toString()
+    }
+
+    private fun isInitialPairingRequest(request: Recorded): Boolean {
+        if (!request.method.equals("POST", ignoreCase = true) || request.path != "/v1/pair/request") return false
+        return !runCatching { JSONObject(request.body).has("pairing_session") }.getOrDefault(false)
+    }
+
+    private fun bindingMatches(request: Recorded, binding: ByteArray): Boolean {
+        val header = request.headers[TLS_BINDING_HEADER] ?: return false
+        return PAIRING_BINDING.matches(header) && runCatching {
+            Base64.getUrlDecoder().decode(header).contentEquals(binding)
+        }.getOrDefault(false)
+    }
+
+    /** The test host derives the comparison code separately from PairingCandidateFactory. */
+    private fun deriveVerificationCode(body: String): String? = runCatching {
+        val document = JSONObject(body)
+        if (!document.has("verification_nonce")) return null
+        val nonce = Base64.getUrlDecoder().decode(document.getString("verification_nonce"))
+        val salt = "steamos-companion:v1:pairing-sas:sha256:$certificateSha256".toByteArray(Charsets.US_ASCII)
+        val derived = SCrypt.generate(nonce, salt, 16_384, 8, 1, 8)
+        val number = BigInteger(1, derived).mod(BigInteger.valueOf(100_000_000L)).toLong()
+        nonce.fill(0)
+        salt.fill(0)
+        derived.fill(0)
+        String.format(Locale.ROOT, "%08d", number)
+    }.getOrNull()
+
     private fun readRequest(input: InputStream): Recorded {
         val head = ByteArrayOutputStream()
         while (!head.toByteArray().endsWith(CRLF_CRLF)) {
@@ -194,6 +317,7 @@ class FakeHost(private val assets: AssetManager) : Closeable {
 
     private inner class Server : DefaultTlsServer(crypto) {
         fun tlsUnique(): ByteArray = context.exportChannelBinding(ChannelBinding.tls_unique)
+        fun securityParameters() = context.securityParametersConnection
 
         override fun getSupportedVersions(): Array<ProtocolVersion> = ProtocolVersion.TLSv12.only()
 
@@ -212,6 +336,12 @@ class FakeHost(private val assets: AssetManager) : Closeable {
         const val NOT_FOUND = "fixtures/contract/unsupported/unknown-path-get-authenticated.json"
         const val MAX_HEAD = 16 * 1024
         const val MAX_JSON_BYTES = 256 * 1024
+        const val TLS_BINDING_HEADER = "x-steamos-companion-tls-binding"
+        const val PAIRING_ID = "pair-phase02-0001"
+        const val PAIRING_SESSION = "phase02-pairing-session-0001"
+        const val HOST_ID = "host-fixture0001xxxxxxxxxxxxx"
+        const val TEST_BEARER_TOKEN = "phase02-long-lived-test-token-0001"
+        val PAIRING_BINDING = Regex("^[A-Za-z0-9_-]{16,510}={0,2}$")
         val CRLF_CRLF = "\r\n\r\n".toByteArray(Charsets.US_ASCII)
         val SUITES = intArrayOf(
             CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,

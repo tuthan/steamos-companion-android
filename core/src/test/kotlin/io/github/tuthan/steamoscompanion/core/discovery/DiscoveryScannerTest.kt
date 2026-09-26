@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.core.discovery
 
 import io.github.tuthan.steamoscompanion.core.ports.Ipv4Subnet
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.DiscoveryProbeResult
@@ -193,15 +194,43 @@ class DiscoveryScannerTest {
             while (!cancellation.isCancelled) Thread.sleep(5)
             DiscoveryProbeResult.Failed(TransportFailure.CANCELLED)
         }
-        val scanner = DiscoveryScanner(networkAccess(path("wifi", "192.168.1.5", 24)), probe)
+        val scanner = DiscoveryScanner(
+            networkAccess(path("wifi", "192.168.1.5", 24), LocalNetworkPermissionState.LegacyRestrictionUnknown),
+            probe,
+        )
         try {
             val startedAt = System.nanoTime()
-            val result = scanner.scan(budgetMillis = DiscoveryScanner.API36_LEGACY_SCAN_BUDGET_MS)
+            val result = scanner.scan()
             val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
             assertTrue(entered.await(1, TimeUnit.SECONDS))
             assertTrue(result.timedOut)
             assertTrue(elapsedMillis in 2_500L..4_500L)
             assertTrue(result.addressesProbed in 1..DiscoveryScanner.MAX_CONCURRENT_PROBES)
+            assertEquals(LocalNetworkPermissionState.LegacyRestrictionUnknown, result.permissionStateAtStart)
+            assertTrue(result.qualifiedPermissionFailure)
+        } finally {
+            scanner.close()
+        }
+    }
+
+    @Test
+    fun mandatoryPermissionMissingBlocksAutomaticAndManualDiscoveryBeforeAnyProbe() {
+        var probes = 0
+        val path = path("wifi", "192.168.1.5", 24)
+        val scanner = DiscoveryScanner(
+            networkAccess(path, LocalNetworkPermissionState.RequiredPermissionMissing),
+            DiscoveryProbe { _, _ ->
+                probes++
+                DiscoveryProbeResult.Failed(TransportFailure.CONNECT)
+            },
+        )
+        try {
+            val scan = scanner.scan()
+            assertEquals(0, scan.addressesProbed)
+            assertEquals(LocalNetworkPermissionState.RequiredPermissionMissing, scan.localNetworkPermissionState)
+            assertEquals(0, probes)
+            assertTrue(scanner.probeManual("deck.local:18443", path) is ManualProbeResult.Failed)
+            assertEquals(0, probes)
         } finally {
             scanner.close()
         }
@@ -218,8 +247,12 @@ class DiscoveryScannerTest {
         )
     }
 
-    private fun networkAccess(path: LanPath) = object : NetworkAccess {
+    private fun networkAccess(
+        path: LanPath,
+        permissionState: LocalNetworkPermissionState = LocalNetworkPermissionState.Allowed,
+    ) = object : NetworkAccess {
         override fun activeLanPaths(): List<LanPath> = listOf(path)
+        override fun localNetworkPermissionState() = permissionState
         override fun bind(socket: Socket, path: LanPath) = Unit
         override fun bind(socket: DatagramSocket, path: LanPath) = Unit
     }

@@ -18,9 +18,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** Selects Wi-Fi/Ethernet networks and binds DNS plus each socket to the same Android Network. */
 class AndroidNetworkAccess(context: Context) : NetworkAccess {
+    private val localNetwork = LocalNetworkAccess(context.applicationContext)
     private val connectivity = context.applicationContext.getSystemService(ConnectivityManager::class.java)
         ?: throw IllegalStateException("Connectivity service is unavailable")
     private val networks = ConcurrentHashMap<String, Network>()
+
+    override fun localNetworkPermissionState() = localNetwork.state()
 
     @Suppress("DEPRECATION") // getAllNetworks is the API-21-compatible way to enumerate simultaneous Wi-Fi/Ethernet links.
     override fun activeLanPaths(): List<LanPath> {

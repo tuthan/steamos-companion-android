@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.core.discovery
 
 import io.github.tuthan.steamoscompanion.core.ports.Ipv4Subnet
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
@@ -46,8 +47,14 @@ data class DiscoveryScanResult(
     val cancelled: Boolean,
     val timedOut: Boolean,
     val failedProbes: Int,
+    val localNetworkPermissionState: LocalNetworkPermissionState = LocalNetworkPermissionState.Allowed,
+    val permissionStateAtStart: LocalNetworkPermissionState = localNetworkPermissionState,
 ) {
     val partial: Boolean get() = skippedSubnets.isNotEmpty() || truncated || cancelled || timedOut
+    val qualifiedPermissionFailure: Boolean
+        get() = candidates.isEmpty() &&
+            (localNetworkPermissionState == LocalNetworkPermissionState.LegacyRestrictionUnknown ||
+                permissionStateAtStart == LocalNetworkPermissionState.LegacyRestrictionUnknown)
 }
 
 sealed interface ManualProbeResult {
@@ -80,8 +87,28 @@ class DiscoveryScanner(
         externalCancellation: CancellationSignal? = null,
     ): DiscoveryScanResult {
         require(budgetMillis in 1..MAX_SCAN_BUDGET_MS)
+        val permissionStateAtStart = networkAccess.localNetworkPermissionState()
         val cancellation = externalCancellation ?: CancellationSignal()
         val scanGeneration = beginRun(cancellation)
+        if (permissionStateAtStart == LocalNetworkPermissionState.RequiredPermissionMissing) {
+            return DiscoveryScanResult(
+                generation = scanGeneration,
+                candidates = emptyList(),
+                addressesProbed = 0,
+                skippedSubnets = emptyList(),
+                truncated = false,
+                cancelled = false,
+                timedOut = false,
+                failedProbes = 0,
+                localNetworkPermissionState = networkAccess.localNetworkPermissionState(),
+                permissionStateAtStart = permissionStateAtStart,
+            )
+        }
+        val effectiveBudgetMillis = if (permissionStateAtStart == LocalNetworkPermissionState.LegacyRestrictionUnknown) {
+            minOf(budgetMillis, API36_LEGACY_SCAN_BUDGET_MS)
+        } else {
+            budgetMillis
+        }
         val (targets, skipped, truncated) = buildTargets(paths, port)
         val completion: CompletionService<ProbeResult> = ExecutorCompletionService(probeExecutor)
         val inFlight = mutableSetOf<Future<ProbeResult>>()
@@ -90,7 +117,7 @@ class DiscoveryScanner(
         var completed = 0
         var failed = 0
         val start = System.nanoTime()
-        val deadline = start + TimeUnit.MILLISECONDS.toNanos(budgetMillis)
+        val deadline = start + TimeUnit.MILLISECONDS.toNanos(effectiveBudgetMillis)
         var timedOut = false
 
         try {
@@ -147,6 +174,8 @@ class DiscoveryScanner(
             cancelled = stale || (cancellation.isCancelled && !timedOut),
             timedOut = timedOut,
             failedProbes = failed,
+            localNetworkPermissionState = networkAccess.localNetworkPermissionState(),
+            permissionStateAtStart = permissionStateAtStart,
         )
     }
 
@@ -159,6 +188,10 @@ class DiscoveryScanner(
         }
         val signal = cancellation ?: CancellationSignal()
         val runGeneration = beginRun(signal)
+        if (networkAccess.localNetworkPermissionState() == LocalNetworkPermissionState.RequiredPermissionMissing) {
+            if (activeSignal.get() === signal) activeSignal.compareAndSet(signal, null)
+            return ManualProbeResult.Failed("Local network permission is required")
+        }
         return try {
             val result = probe.probe(TransportTarget(endpoint, path), signal, MANUAL_PROBE_BUDGET_MS)
             if (runGeneration != generation.get()) return ManualProbeResult.Failed("cancelled")

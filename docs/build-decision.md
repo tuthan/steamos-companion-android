@@ -36,7 +36,7 @@ Application: ID and namespace `io.github.tuthan.steamoscompanion` (matches the O
 
 Emulator networking is NAT (`10.0.2.15` guest, `10.0.2.2` host): pinned HTTPS works, LAN discovery and Wake cannot. Those are emulator-incapable, not failures. Emulator Keystore is software-backed.
 
-The JVM screenshot tool is chosen in Phase 06 after its review. Roborazzi 1.75.0 (Robolectric 4.17) and Paparazzi 1.3.5 are queued for review; neither is in the catalog.
+The JVM screenshot tool is chosen in Phase 06 after its review. Roborazzi 1.73.0 (Robolectric 4.17) and Paparazzi 1.3.5 are queued for review; neither is in the catalog. Roborazzi 1.75.0 was not published on the review date.
 
 ## Dependency reviews
 
@@ -64,7 +64,7 @@ A pattern to keep in mind: every package with a single dependency (bctls→bcpro
 | `com.google.zxing:core` 3.5.4 | Not in the catalog yet (scanner phase) | Scan healthy: one ignore-level `usesEval`, zero runtime dependencies. | block_pending_human_review (medium eval) | **Approved as the QR decoder.** It enters the catalog with the scanner code. |
 | GitHub Actions `actions/checkout` v7.0.1 `3d3c42e`, `actions/setup-java` v6.0.1 `de7274f` | CI | Not reviewable by package score; workflow scanning is experimental. Pinned by full commit SHA, `permissions: contents: read`, `persist-credentials: false`. | block_pending_human_review (tooling unavailable) | **Approved** as first-party GitHub actions pinned by SHA. |
 
-Candidates for later phases stay out of the catalog until reviewed in their phase: the Compose BOM 2026.09.00 and Material 3, `activity-compose` 1.13.0, `lifecycle-viewmodel-compose` 2.11.0, `kotlinx-serialization-json` 1.11.0 with its plugin, `kotlinx-coroutines-core` 1.11.0, CameraX 1.6.2, and the screenshot tool (Roborazzi 1.75.0 or Paparazzi 1.3.5).
+Candidates for later phases stay out of the catalog until reviewed in their phase: the Compose BOM 2026.09.00 and Material 3, `activity-compose` 1.13.0, `lifecycle-viewmodel-compose` 2.11.0, `kotlinx-serialization-json` 1.11.0 with its plugin, `kotlinx-coroutines-core` 1.11.0, CameraX 1.6.2, and the screenshot tool (Roborazzi 1.73.0 or Paparazzi 1.3.5). The queued Roborazzi 1.75.0 version had no Maven Central release as of 2026-09-26; 1.73.0 is the latest stable version available.
 <!-- socket:end -->
 
 ## Barcode decoder

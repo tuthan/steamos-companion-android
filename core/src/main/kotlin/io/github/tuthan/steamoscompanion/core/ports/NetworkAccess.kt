@@ -25,6 +25,9 @@ data class Ipv4Subnet(val address: InetAddress, val prefixLength: Int)
 interface NetworkAccess {
     fun activeLanPaths(): List<LanPath>
 
+    /** Re-read on every action; API 36's compatibility restriction cannot be inferred from a timeout. */
+    fun localNetworkPermissionState(): LocalNetworkPermissionState = LocalNetworkPermissionState.Allowed
+
     /** Resolve on the selected network when the platform supports per-network DNS. */
     @Throws(UnknownHostException::class)
     fun resolve(host: String, path: LanPath): List<InetAddress> = InetAddress.getAllByName(host).toList()

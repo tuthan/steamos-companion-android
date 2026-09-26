@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.core.transport
 
 import io.github.tuthan.steamoscompanion.core.ports.Clock
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.ports.SocketFactory
 import io.github.tuthan.steamoscompanion.core.protocol.ApiReply
@@ -30,7 +31,9 @@ import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.bouncycastle.crypto.util.PrivateKeyFactory
@@ -54,6 +57,100 @@ import org.junit.Test
 
 /** Exercises the production transport against a JVM loopback TLS host using the shipped test key. */
 class ProductionTransportSocketTest {
+    @Test
+    fun requiredLocalNetworkPermissionBlocksBeforeDnsOrSocketCreation() {
+        val resolutions = AtomicInteger()
+        val sockets = AtomicInteger()
+        val network = object : NetworkAccess {
+            override fun activeLanPaths() = emptyList<LanPath>()
+            override fun localNetworkPermissionState() = LocalNetworkPermissionState.RequiredPermissionMissing
+            override fun resolve(host: String, path: LanPath): List<InetAddress> {
+                resolutions.incrementAndGet()
+                return listOf(InetAddress.getByName(host))
+            }
+            override fun bind(socket: Socket, path: LanPath) = Unit
+            override fun bind(socket: DatagramSocket, path: LanPath) = Unit
+        }
+        val factory = object : SocketFactory {
+            override fun create(): Socket {
+                sockets.incrementAndGet()
+                return Socket()
+            }
+            override fun createDatagram() = DatagramSocket(null)
+        }
+        val target = TransportTarget(
+            HostEndpoint.parse("127.0.0.1:18443"),
+            LanPath("test", null, emptyList(), emptyList()),
+        )
+        val request = ApiRequest(HttpMethod.GET, "/v1/status", bearerToken = "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx")
+
+        assertEquals(
+            RequestOutcome.NotSent(TransportFailure.PERMISSION),
+            PinnedHttpTransport(TestClock, network, factory).execute(target, "sha256:${"ab".repeat(32)}", request),
+        )
+        assertEquals(0, resolutions.get())
+        assertEquals(0, sockets.get())
+    }
+
+    @Test
+    fun permissionRevocationClosesAnInFlightSocketAndKeepsDispatchedMutationUnresolved() {
+        val releaseHost = CountDownLatch(1)
+        FakeTlsHost().use { host ->
+            host.script("POST /v1/power", Reply.HoldConnection(releaseHost))
+            val network = MutableNetworkAccess()
+            val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+            try {
+                val future = pool.submit<RequestOutcome> {
+                    transport(network).execute(
+                        target(host),
+                        host.pin,
+                        ApiRequest(
+                            HttpMethod.POST,
+                            "/v1/power",
+                            jsonObject(
+                                "request_id" to JsonValue.StringValue("permission-revoked-power"),
+                                "action" to JsonValue.StringValue("suspend"),
+                            ),
+                            "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx",
+                        ),
+                    )
+                }
+                val receivedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+                while (host.requests.isEmpty() && System.nanoTime() < receivedDeadline) Thread.sleep(5)
+                assertTrue("fake host did not receive the request", host.requests.isNotEmpty())
+
+                network.revokePermission()
+
+                assertEquals(
+                    RequestOutcome.Unknown(TransportFailure.PERMISSION),
+                    future.get(2, TimeUnit.SECONDS),
+                )
+            } finally {
+                releaseHost.countDown()
+                pool.shutdownNow()
+            }
+        }
+    }
+
+    @Test
+    fun api36TimeoutCarriesTheQualifiedNearbyPermissionFailure() {
+        val releaseHost = CountDownLatch(1)
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/status", Reply.HoldConnection(releaseHost))
+            val network = MutableNetworkAccess(LocalNetworkPermissionState.LegacyRestrictionUnknown)
+            try {
+                val result = transport(network).execute(
+                    target(host),
+                    host.pin,
+                    ApiRequest(HttpMethod.GET, "/v1/status", bearerToken = "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"),
+                )
+                assertEquals(RequestOutcome.Unknown(TransportFailure.LEGACY_PERMISSION_MAY_BE_REQUIRED), result)
+            } finally {
+                releaseHost.countDown()
+            }
+        }
+    }
+
     @Test
     fun bootstrapHeaderIsIndependentlyCheckedAgainstServerTlsUniqueAndPinMismatchSendsNoRequest() {
         FakeTlsHost().use { host ->
@@ -151,16 +248,12 @@ class ProductionTransportSocketTest {
         }
     }
 
-    private fun transport() = PinnedHttpTransport(
-        TestClock,
-        object : NetworkAccess {
+    private fun transport(networkAccess: NetworkAccess = object : NetworkAccess {
             override fun activeLanPaths() = emptyList<LanPath>()
             override fun resolve(host: String, path: LanPath) = listOf(InetAddress.getByName("127.0.0.1"))
             override fun bind(socket: Socket, path: LanPath) = Unit
             override fun bind(socket: DatagramSocket, path: LanPath) = Unit
-        },
-        TestSocketFactory,
-    )
+        }) = PinnedHttpTransport(TestClock, networkAccess, TestSocketFactory)
 
     private fun target(host: FakeTlsHost): TransportTarget {
         val address = InetAddress.getByName("127.0.0.1")
@@ -184,6 +277,7 @@ class ProductionTransportSocketTest {
     private sealed interface Reply {
         data class Fixture(val path: String) : Reply
         data class Body(val path: String) : Reply
+        data class HoldConnection(val release: CountDownLatch) : Reply
         data object Lost : Reply
     }
 
@@ -237,6 +331,10 @@ class ProductionTransportSocketTest {
                 requests += request.copy(tlsUnique = tlsServer.tlsUnique())
                 when (val reply = scripts["${request.method} ${request.path}"]?.pollFirst()) {
                     Reply.Lost -> protocol.close()
+                    is Reply.HoldConnection -> {
+                        check(reply.release.await(5, TimeUnit.SECONDS)) { "held connection was not released" }
+                        protocol.close()
+                    }
                     is Reply.Fixture -> respondFixture(protocol, reply.path)
                     is Reply.Body -> respond(protocol, 200, resource(reply.path))
                     null -> if (request.method == "GET" && request.path == "/v1/discovery") {
@@ -318,6 +416,20 @@ class ProductionTransportSocketTest {
                 CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
                 CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             )
+        }
+    }
+
+    private class MutableNetworkAccess(
+        @Volatile var permissionState: LocalNetworkPermissionState = LocalNetworkPermissionState.Allowed,
+    ) : NetworkAccess {
+        override fun activeLanPaths() = emptyList<LanPath>()
+        override fun localNetworkPermissionState() = permissionState
+        override fun resolve(host: String, path: LanPath) = listOf(InetAddress.getByName("127.0.0.1"))
+        override fun bind(socket: Socket, path: LanPath) = Unit
+        override fun bind(socket: DatagramSocket, path: LanPath) = Unit
+
+        fun revokePermission() {
+            permissionState = LocalNetworkPermissionState.RequiredPermissionMissing
         }
     }
 

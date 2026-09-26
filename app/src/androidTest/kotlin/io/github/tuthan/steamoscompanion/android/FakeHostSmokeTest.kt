@@ -6,6 +6,7 @@ import io.github.tuthan.steamoscompanion.android.fakehost.FakeHost
 import io.github.tuthan.steamoscompanion.android.fakehost.FakeHost.Reply
 import io.github.tuthan.steamoscompanion.android.fakehost.PinnedTestClient
 import java.io.IOException
+import java.util.Base64
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -16,6 +17,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.bouncycastle.tls.CipherSuite
+import org.bouncycastle.tls.ProtocolVersion
 
 /** Phase 01 instrumented smoke check: pinned TLS to the fake host serving the vendored bundle. */
 @RunWith(AndroidJUnit4::class)
@@ -51,6 +54,42 @@ class FakeHostSmokeTest {
         assertFalse("tls-unique requires a full handshake", response.resumed)
         assertTrue(response.tlsUnique.size >= 12)
         assertArrayEquals(host.requests.single().tlsUnique, response.tlsUnique)
+        assertEquals(ProtocolVersion.TLSv12, host.requests.single().tlsVersion)
+        assertTrue(host.requests.single().tlsCipherSuite in setOf(
+            CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        ))
+        assertTrue("host and client must negotiate extended master secret", host.requests.single().extendedMasterSecret)
+        assertFalse(host.requests.single().resumedSession)
+        host.assertHealthy()
+    }
+
+    @Test
+    fun firstPairingRequestRequiresTheExactTlsUniqueHeaderBeforeCreatingASession() {
+        host.script(
+            "POST", "/v1/pair/request",
+            Reply.Fixture(contract("pair-request/verification-pending")),
+        )
+        val invalid = client.request(
+            host.address,
+            "POST",
+            "/v1/pair/request",
+            body = "{}",
+            headers = mapOf("X-SteamOS-Companion-TLS-Binding" to "Zml4dHVyZS10bHMx"),
+        )
+        assertEquals(401, invalid.status)
+        assertEquals("pairing_channel_mismatch", org.json.JSONObject(invalid.body).getString("error"))
+
+        val matching = client.request(host.address, "POST", "/v1/pair/request", body = "{}")
+        assertEquals(200, matching.status)
+        val requests = host.requests
+        assertEquals(2, requests.size)
+        assertFalse(Base64.getUrlDecoder().decode(requests.first().headers.getValue("x-steamos-companion-tls-binding"))
+            .contentEquals(requests.first().tlsUnique))
+        assertTrue(Base64.getUrlDecoder().decode(requests.last().headers.getValue("x-steamos-companion-tls-binding"))
+            .contentEquals(requests.last().tlsUnique))
+        assertEquals(2, requests.map { it.tlsUnique.toList() }.distinct().size)
         host.assertHealthy()
     }
 

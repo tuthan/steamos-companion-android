@@ -88,6 +88,9 @@ internal class RequestDeadline(
         }
     }
 
+    /** Allows a platform permission observer to stop this exchange and close its sockets. */
+    fun cancel() = abort(State.CANCELLED)
+
     fun untrack(future: Future<*>) {
         futures.remove(future)
     }

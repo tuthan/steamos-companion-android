@@ -19,6 +19,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    testBuildType = "debug"
+
     flavorDimensions += "target"
     productFlavors {
         // Release target until the Gate A0.2 target-37 migration passes.
@@ -39,6 +41,13 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
+        // Release-configured APK with local test signing; use the normal debug AndroidTest APK separately.
+        create("r8Probe") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles("proguard-r8-probe-rules.pro")
+        }
     }
 
     compileOptions {
@@ -47,6 +56,7 @@ android {
     }
 
     sourceSets {
+        getByName("test").resources.directories.add("src/test/fixtures")
         // The fake host serves the exact vendored bundle; nothing is copied or edited.
         getByName("androidTest").assets.directories += rootProject.file("protocol").path
     }

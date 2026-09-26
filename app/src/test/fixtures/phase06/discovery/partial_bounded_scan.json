@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "fixtureOnly": true,
+  "screen": "discovery",
+  "scenario": "partial_bounded_scan",
+  "source": "flows §4",
+  "contractFixtures": [],
+  "sampleData": {
+    "synthetic": true,
+    "device": {
+      "endpoint": "deck-1.invalid:18443",
+      "hostId": "fixture-host-a2",
+      "certificateFingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "pairing": {
+      "clientName": "SteamOS Companion fixture",
+      "requestedScopes": [
+        "status.read",
+        "power.control",
+        "display.control"
+      ],
+      "comparisonCode": "75332470",
+      "payloadSecretIncluded": false
+    },
+    "display": {
+      "outputId": "fixture-output-1",
+      "generation": 7,
+      "name": "Fixture HDMI display",
+      "currentModeId": "fixture-mode-current",
+      "currentMode": {
+        "width": 1920,
+        "height": 1080,
+        "refreshHz": 60.0
+      },
+      "savedModeId": "fixture-mode-saved",
+      "savedMode": {
+        "width": 1280,
+        "height": 720,
+        "refreshHz": 60.0
+      },
+      "modes": [
+        {
+          "id": "fixture-mode-current",
+          "width": 1920,
+          "height": 1080,
+          "refreshHz": 60.0
+        },
+        {
+          "id": "fixture-mode-saved",
+          "width": 1280,
+          "height": 720,
+          "refreshHz": 60.0
+        }
+      ]
+    },
+    "discovery": {
+      "candidateEndpoints": [
+        "deck-a.invalid:18443",
+        "deck-b.invalid:18443"
+      ]
+    }
+  }
+}
