@@ -81,6 +81,24 @@ class PairingStateTransactions(private val repository: EncryptedStateRepository)
     }
 
     /** Explicit Forget clears only the selected host's journal context and invalidates callbacks. */
+    fun forgetActiveHost(expected: ActiveHost): StateCommitResult = repository.transact { state ->
+        val active = state.activeHost
+        if (active == null || active.hostId != expected.hostId || active.clientId != expected.clientId ||
+            active.endpoint != expected.endpoint || active.certificatePin != expected.certificatePin ||
+            active.pairedAtMillis != expected.pairedAtMillis
+        ) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed")
+        if (state.candidate?.phase == CandidatePhase.APPROVED_STAGED) {
+            throw StateInvariantException(StateInvariantCode.INVALID_CANDIDATE, "Approved credentials must be self-revoked before Forget")
+        }
+        state.copy(
+            pairingGeneration = increment(state.pairingGeneration),
+            activeHost = null,
+            candidate = null,
+            journal = state.journal.filterNot { it.hostId == active.hostId && it.clientId == active.clientId },
+        )
+    }
+
+    /** Kept for older callers that only retained a host ID. Prefer the full-identity overload. */
     fun forgetActiveHost(expectedHostId: String): StateCommitResult = repository.transact { state ->
         val active = state.activeHost
         if (active == null || active.hostId != expectedHostId) {

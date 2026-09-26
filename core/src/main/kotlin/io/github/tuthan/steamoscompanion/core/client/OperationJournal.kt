@@ -37,6 +37,18 @@ class OperationJournal(
     private val repository: EncryptedStateRepository,
     private val clock: Clock,
 ) {
+    /** Refuse a queued UI action if the selected pairing changed before durable dispatch. */
+    fun dispatchForHost(expected: ActiveHost, request: ApiRequest, sender: JournalMutationSender): JournalDispatchResult =
+        dispatchInternal(request, sender) { state ->
+            val current = state.activeHost
+                ?: throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "There is no active paired host")
+            if (current.hostId != expected.hostId || current.clientId != expected.clientId ||
+                current.endpoint != expected.endpoint || current.certificatePin != expected.certificatePin ||
+                current.pairedAtMillis != expected.pairedAtMillis
+            ) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed")
+            PreparedTarget(current, request, state)
+        }
+
     fun dispatch(request: ApiRequest, sender: JournalMutationSender): JournalDispatchResult = dispatchInternal(request, sender) { state ->
         val host = state.activeHost
             ?: throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "There is no active paired host")

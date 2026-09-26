@@ -7,7 +7,13 @@ import io.github.tuthan.steamoscompanion.android.data.AndroidClock
 import io.github.tuthan.steamoscompanion.android.data.AndroidNetworkAccess
 import io.github.tuthan.steamoscompanion.android.data.AndroidSocketFactory
 import io.github.tuthan.steamoscompanion.android.data.LocalNetworkAccess
+import io.github.tuthan.steamoscompanion.android.data.LocalAliasStore
+import io.github.tuthan.steamoscompanion.android.data.PinnedStatusGateway
 import io.github.tuthan.steamoscompanion.core.client.EncryptedStateRepository
+import io.github.tuthan.steamoscompanion.core.client.ConnectionRepair
+import io.github.tuthan.steamoscompanion.core.client.ConnectionRemoval
+import io.github.tuthan.steamoscompanion.core.client.OperationJournal
+import io.github.tuthan.steamoscompanion.core.client.JournalMutationSender
 import io.github.tuthan.steamoscompanion.core.client.PairingStateTransactions
 import io.github.tuthan.steamoscompanion.core.discovery.DiscoveryScanner
 import io.github.tuthan.steamoscompanion.core.discovery.PinnedDiscoveryProbe
@@ -15,14 +21,24 @@ import io.github.tuthan.steamoscompanion.core.pairing.PairingCoordinator
 import io.github.tuthan.steamoscompanion.core.pairing.PinnedPairingGateway
 import io.github.tuthan.steamoscompanion.core.ports.Clock
 import io.github.tuthan.steamoscompanion.core.transport.PinnedHttpTransport
+import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
+import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
+import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
+import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 
 /** Process-level production graph shared by the onboarding and paired-device UI. */
 class CompanionRuntime private constructor(
     val clock: Clock,
     val networkAccess: AndroidNetworkAccess,
     val localNetworkAccess: LocalNetworkAccess,
+    val aliasStore: LocalAliasStore,
     val stateRepository: EncryptedStateRepository,
     val pairingTransactions: PairingStateTransactions,
+    val operationJournal: OperationJournal,
+    val connectionRemoval: ConnectionRemoval,
+    val connectionRepair: ConnectionRepair,
+    val statusGateway: PinnedStatusGateway,
+    val mutationSender: JournalMutationSender,
     val transport: PinnedHttpTransport,
     val pairingCoordinator: PairingCoordinator,
     val discoveryScanner: DiscoveryScanner,
@@ -35,6 +51,7 @@ class CompanionRuntime private constructor(
             val clock = AndroidClock()
             val networkAccess = AndroidNetworkAccess(appContext)
             val localNetworkAccess = LocalNetworkAccess(appContext)
+            val aliasStore = LocalAliasStore(appContext)
             val stateRepository = AndroidAtomicStateStore.createRepository(appContext)
             val pairingTransactions = PairingStateTransactions(stateRepository)
             val transport = PinnedHttpTransport(clock, networkAccess, AndroidSocketFactory())
@@ -45,12 +62,31 @@ class CompanionRuntime private constructor(
                 gateway = PinnedPairingGateway(transport, networkAccess),
             )
             val discoveryScanner = DiscoveryScanner(networkAccess, PinnedDiscoveryProbe(transport))
+            val operationJournal = OperationJournal(stateRepository, clock)
+            val connectionRemoval = ConnectionRemoval(operationJournal, pairingTransactions)
+            val connectionRepair = ConnectionRepair(stateRepository, discoveryScanner)
+            val statusGateway = PinnedStatusGateway(transport, networkAccess, stateRepository)
+            val mutationSender = JournalMutationSender { host, request, _ ->
+                val path = networkAccess.activeLanPaths().firstOrNull()
+                    ?: return@JournalMutationSender RequestOutcome.NotSent(TransportFailure.CONNECT)
+                transport.execute(
+                    TransportTarget(HostEndpoint.parse(host.endpoint), path),
+                    host.certificatePin,
+                    request,
+                )
+            }
             return CompanionRuntime(
                 clock = clock,
                 networkAccess = networkAccess,
                 localNetworkAccess = localNetworkAccess,
+                aliasStore = aliasStore,
                 stateRepository = stateRepository,
                 pairingTransactions = pairingTransactions,
+                operationJournal = operationJournal,
+                connectionRemoval = connectionRemoval,
+                connectionRepair = connectionRepair,
+                statusGateway = statusGateway,
+                mutationSender = mutationSender,
                 transport = transport,
                 pairingCoordinator = pairingCoordinator,
                 discoveryScanner = discoveryScanner,
