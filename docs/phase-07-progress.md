@@ -9,6 +9,7 @@ Source plan: `steamos-companion/android/phases/07-live-onboarding-and-status.md`
 - A paired status reader uses the saved endpoint, certificate pin, and bearer. It verifies the response host ID, checks that the active pairing is still the one used for the request, and persists a changed boot ID. Outputs and display order are read only after a successful status read.
 - The single foreground `StatusPoller` has a two-second success cadence and six-second failure cadence after each completed cycle. Manual refresh coalesces during an in-flight read. Stopping cancels its work and clock. A one-second monotonic tick marks a read stale at 15 seconds; unreachable takes headline precedence without erasing stale state.
 - A paired Android network callback invalidates discovery and requests one fresh status read. It exposes a hook to re-evaluate the Wake interface. It sends no mutation.
+- The network monitor deduplicates the initial capability/link callbacks for each available network, then reacts to actual transport or link-address changes and losses. This prevents a single registration burst from repeatedly cancelling its own fresh read.
 - Connection repair probes a proposed address without a credential, compares both the announced host ID and certificate fingerprint to the saved pairing, and atomically updates only the endpoint if both match. A mismatch leaves the existing credential and endpoint intact.
 - The production runtime exposes the existing crash-safe operation journal, a pinned mutation sender, connection repair/removal services, and a local alias store. Revoke is journaled for the exact selected pairing; a lost reply keeps the credential and an `UNKNOWN` entry. Explicit Forget removes local credentials and that pairing's journal context. The alias store holds only a display name keyed by a digest of host/client identity; it never stores a credential.
 - Android's monotonic clock now uses `SystemClock.elapsedRealtimeNanos()`, including device sleep.
@@ -31,5 +32,6 @@ Source plan: `steamos-companion/android/phases/07-live-onboarding-and-status.md`
 - `./gradlew --offline :core:test --tests '*ConnectionRepairTest' --tests '*StatusPollerTest'` — passed.
 - `./gradlew --offline :core:test :app:compileBaselineDebugKotlin :app:compileTarget37DebugKotlin` — passed after the repair/removal and deadline-anchor changes.
 - `./gradlew --offline :core:test :app:testBaselineDebugUnitTest :app:testTarget37DebugUnitTest` — passed after the monotonic pairing-deadline change and the no-background-polling assertion.
+- `./gradlew --offline :app:compileBaselineDebugKotlin :app:compileTarget37DebugKotlin` — passed after the network callback update.
 
 These are JVM/build checks, not live-device or rendered-screen evidence.

@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.android.data
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -18,10 +19,46 @@ class PairedNetworkMonitor(
 ) : Closeable {
     private val connectivity = context.applicationContext.getSystemService(ConnectivityManager::class.java)
         ?: throw IllegalStateException("Connectivity service is unavailable")
+    private data class SeenNetwork(val transports: Int? = null, val link: String? = null)
+    private val seen = mutableMapOf<Network, SeenNetwork>()
     private val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = changed()
-        override fun onLost(network: Network) = changed()
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = changed()
+        override fun onAvailable(network: Network) {
+            val changed = synchronized(this@PairedNetworkMonitor) {
+                if (!registered || network in seen) false else { seen[network] = SeenNetwork(); true }
+            }
+            if (changed) dispatchChange()
+        }
+
+        override fun onLost(network: Network) {
+            val changed = synchronized(this@PairedNetworkMonitor) { registered && seen.remove(network) != null }
+            if (changed) dispatchChange()
+        }
+
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            val flags = (if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) 1 else 0) or
+                (if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) 2 else 0)
+            val changed = synchronized(this@PairedNetworkMonitor) {
+                if (!registered) false else {
+                    val previous = seen[network]
+                    seen[network] = (previous ?: SeenNetwork()).copy(transports = flags)
+                    previous?.transports != null && previous.transports != flags
+                }
+            }
+            if (changed) dispatchChange()
+        }
+
+        override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) {
+            val signature = properties.interfaceName.orEmpty() + ":" +
+                properties.linkAddresses.map { it.toString() }.sorted().joinToString(",")
+            val changed = synchronized(this@PairedNetworkMonitor) {
+                if (!registered) false else {
+                    val previous = seen[network]
+                    seen[network] = (previous ?: SeenNetwork()).copy(link = signature)
+                    previous?.link != null && previous.link != signature
+                }
+            }
+            if (changed) dispatchChange()
+        }
     }
     @Volatile private var registered = false
 
@@ -31,17 +68,23 @@ class PairedNetworkMonitor(
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
             .build()
-        connectivity.registerNetworkCallback(request, callback)
         registered = true
+        try {
+            connectivity.registerNetworkCallback(request, callback)
+        } catch (error: RuntimeException) {
+            registered = false
+            throw error
+        }
     }
 
     @Synchronized override fun close() {
         if (!registered) return
         registered = false
         connectivity.unregisterNetworkCallback(callback)
+        seen.clear()
     }
 
-    private fun changed() {
+    private fun dispatchChange() {
         if (!registered) return
         discovery.networkChanged()
         poller.networkChanged()
