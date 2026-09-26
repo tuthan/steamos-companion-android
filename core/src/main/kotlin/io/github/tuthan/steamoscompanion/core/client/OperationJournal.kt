@@ -345,6 +345,13 @@ class OperationJournal(
                     updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
                     resultSummary = "No operation record was returned; the earlier action may have run.",
                 )
+            if (operation.requestId != entry.requestId ||
+                entry.path == ApiRoute.PAIR_REVOKE_SELF.path && operation.kind != "pair.revoke-self"
+            ) return entry.copy(
+                phase = JournalPhase.UNKNOWN,
+                updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
+                resultSummary = "Operation identity did not match the dispatched request; the earlier action may have run.",
+            )
             val phase = phaseFor(operation.state)
             entry.copy(
                 phase = phase,

@@ -20,6 +20,35 @@ import org.junit.Test
 
 class OperationJournalTest {
     @Test
+    fun mismatchedRevokeOperationCannotClearThePairedCredential() {
+        for ((returnedRequestId, returnedKind) in listOf(
+            "some-other-request" to "pair.revoke-self",
+            "revoke-exact" to "power.suspend",
+        )) {
+            val (_, _, repository, journal) = fixture()
+            val host = testActiveHost()
+            assertTrue(repository.transact { it.copy(activeHost = host) } is StateCommitResult.Saved)
+            val request = io.github.tuthan.steamoscompanion.core.protocol.ApiRequest(
+                io.github.tuthan.steamoscompanion.core.protocol.HttpMethod.POST,
+                "/v1/pair/revoke-self",
+                jsonObject("request_id" to JsonValue.StringValue("revoke-exact")),
+                host.bearerToken,
+            )
+            val result = journal.dispatch(request) { _, _, _ ->
+                RequestOutcome.Reply(
+                    ApiReply.Versioned(1, VersionedPayload.Mutation(
+                        OperationSummary("op-mismatched", returnedRequestId, WireValue.Known(OperationState.SUCCEEDED),
+                            returnedKind, "created", "updated", "revoked", null),
+                        jsonObject("protocol_version" to JsonValue.NumberValue("1")),
+                    )), 202, null,
+                )
+            } as JournalDispatchResult.Finished
+            assertEquals(JournalPhase.UNKNOWN, result.entry.phase)
+            assertEquals(host, (repository.load() as StateLoadResult.Ready).state.activeHost)
+        }
+    }
+
+    @Test
     fun commitsPreparedExactBodyBeforeSenderAndPersistsReturnedOperationId() {
         val (store, _, repository, journal, clock) = fixture()
         assertTrue(repository.transact { it.copy(activeHost = testActiveHost()) } is StateCommitResult.Saved)
