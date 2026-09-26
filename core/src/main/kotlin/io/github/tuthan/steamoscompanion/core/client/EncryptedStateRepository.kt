@@ -48,6 +48,24 @@ class EncryptedStateRepository(
 
     fun load(): StateLoadResult = PROCESS_LOCK.withLock { loadLocked() }
 
+    /** Persist the boot identity from a status response only if the same paired host is still active. */
+    fun recordObservedBootId(expectedHost: ActiveHost, bootId: String): StateCommitResult {
+        val updatedHost = expectedHost.copy(lastObservedBootId = bootId).validated()
+        return transact { state ->
+            val active = state.activeHost
+                ?: throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "No paired host is active")
+            val identityStillMatches = active.hostId == expectedHost.hostId &&
+                active.clientId == expectedHost.clientId &&
+                active.endpoint == expectedHost.endpoint &&
+                active.certificatePin == expectedHost.certificatePin &&
+                active.pairedAtMillis == expectedHost.pairedAtMillis
+            if (!identityStillMatches) {
+                throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Status belongs to a replaced host identity")
+            }
+            state.copy(activeHost = active.copy(lastObservedBootId = updatedHost.lastObservedBootId))
+        }
+    }
+
     fun transact(transform: (PersistentState) -> PersistentState): StateCommitResult = PROCESS_LOCK.withLock {
         val current = when (val loaded = loadLocked()) {
             StateLoadResult.Empty -> PersistentState()

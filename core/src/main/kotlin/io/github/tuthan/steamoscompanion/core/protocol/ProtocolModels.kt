@@ -190,8 +190,7 @@ data class ApiRequest(
                     val poll = "pairing_session" in keys
                     val verification = "verification_nonce" in keys
                     val payload = "pairing_id" in keys || "secret" in keys
-                    val legacy = "pairing_code" in keys
-                    if (listOf(verification, payload, legacy).count { it } != 1) {
+                    if (listOf(verification, payload).count { it } != 1) {
                         throw RequestValidationException("Pairing request must use one supported form")
                     }
                     when {
@@ -203,12 +202,6 @@ data class ApiRequest(
                             exact(setOf("pairing_id", "secret", "client_id", "client_name", "scopes"), setOf("pairing_session"))
                             if (!SAFE_ID.matches(string("pairing_id", 128))) throw RequestValidationException("Invalid pairing_id")
                             string("secret", 256)
-                        }
-                        else -> {
-                            exact(setOf("pairing_code", "client_id", "client_name", "scopes"), setOf("pairing_session"))
-                            if (!Regex("[0-9]{4}-[0-9]{4}").matches(string("pairing_code", 9))) {
-                                throw RequestValidationException("Invalid legacy pairing code")
-                            }
                         }
                     }
                     if (!SAFE_ID.matches(string("client_id", 128))) throw RequestValidationException("Invalid client_id")
@@ -269,7 +262,9 @@ data class ApiRequest(
                     exact(setOf("request_id", "output_id", "generation", "visible")); requestId()
                     if (!SAFE_ID.matches(string("output_id", 128))) throw RequestValidationException("Invalid output_id")
                     positiveInt("generation")
-                    bool("visible")
+                    if (fields["visible"] != JsonValue.BooleanValue(true)) {
+                        throw RequestValidationException("Explicit owner confirmation is required")
+                    }
                 }
                 else -> throw RequestValidationException("This route does not accept a request body")
             }

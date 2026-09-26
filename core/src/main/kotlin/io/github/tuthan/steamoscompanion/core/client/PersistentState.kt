@@ -15,7 +15,7 @@ object PersistentStateLimits {
     const val MAX_ENVELOPE_BYTES = 65 * 1024
     const val MAX_JOURNAL_ENTRIES = 32
     const val MAX_OPERATION_BODY_BYTES = 4 * 1024
-    const val CURRENT_SCHEMA_VERSION = 2
+    const val CURRENT_SCHEMA_VERSION = 3
     const val ENVELOPE_FORMAT_VERSION = 1
     const val STATE_KEY_ALIAS = "steamos-companion-android-state-v1"
     const val STATE_AAD = "steamos-companion:android:state:v1"
@@ -28,6 +28,7 @@ enum class StateInvariantCode {
     INVALID_IDENTITY,
     INVALID_CANDIDATE,
     INVALID_JOURNAL,
+    STATE_TOO_LARGE,
     HISTORY_FULL,
     DUPLICATE_REQUEST_ID,
     STALE_GENERATION,
@@ -71,6 +72,7 @@ data class ActiveHost(
     val grantedScopes: List<String>,
     val wakeTarget: StoredWakeTarget,
     val pairedAtMillis: Long,
+    val lastObservedBootId: String? = null,
 ) {
     fun validated(): ActiveHost {
         requireText(hostId, "host ID", 128)
@@ -80,6 +82,7 @@ data class ActiveHost(
         requireSecret(bearerToken, "bearer token", 512)
         validateScopes(grantedScopes)
         wakeTarget.validated()
+        lastObservedBootId?.let { requireText(it, "host boot ID", 128) }
         if (pairedAtMillis < 0) invalid(StateInvariantCode.INVALID_FIELD, "Invalid paired timestamp")
         return this
     }
@@ -104,7 +107,7 @@ data class StoredWakeTarget(
     }
 }
 
-enum class PairingVariant(val wireValue: String) { VERIFICATION("verification"), LEGACY_CODE("legacy_code"), ADVANCED_PAYLOAD("advanced_payload") }
+enum class PairingVariant(val wireValue: String) { VERIFICATION("verification"), ADVANCED_PAYLOAD("advanced_payload") }
 enum class CandidatePhase(val wireValue: String) {
     READY("ready"),
     REQUESTING("requesting"),
@@ -133,7 +136,6 @@ data class PairingCandidate(
     val phase: CandidatePhase,
     val verificationNonce: String? = null,
     val verificationCode: String? = null,
-    val legacyPairingCode: String? = null,
     val payloadId: String? = null,
     val payloadSecret: String? = null,
     val pairingId: String? = null,
@@ -182,7 +184,7 @@ data class PairingCandidate(
                     CandidatePhase.RATE_LIMITED,
                 )
                 if ((requestMayNeedNonce && verificationNonce?.let { Regex("[A-Za-z0-9_-]{22}").matches(it) } != true) ||
-                    legacyPairingCode != null || payloadId != null || payloadSecret != null
+                    payloadId != null || payloadSecret != null
                 ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid verification candidate")
                 if (verificationCode != null && !Regex("[0-9]{8}").matches(verificationCode)) {
                     invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid verification code")
@@ -190,18 +192,6 @@ data class PairingCandidate(
                 if (requestMayNeedNonce && requestStartedAtMillis != null && verificationCode == null) {
                     invalid(StateInvariantCode.INVALID_CANDIDATE, "Pairing code is missing")
                 }
-            }
-            PairingVariant.LEGACY_CODE -> {
-                val requestMayNeedCode = phase in setOf(
-                    CandidatePhase.READY,
-                    CandidatePhase.REQUESTING,
-                    CandidatePhase.REQUEST_UNCONFIRMED,
-                    CandidatePhase.PENDING,
-                    CandidatePhase.RATE_LIMITED,
-                )
-                if ((requestMayNeedCode && legacyPairingCode?.let { Regex("[0-9]{4}-[0-9]{4}").matches(it) } != true) ||
-                    verificationNonce != null || verificationCode != null || payloadId != null || payloadSecret != null
-                ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid legacy pairing candidate")
             }
             PairingVariant.ADVANCED_PAYLOAD -> {
                 val requestMayNeedPayload = phase in setOf(
@@ -213,7 +203,7 @@ data class PairingCandidate(
                 )
                 if (payloadId?.let(::isSafeId) != true ||
                     (requestMayNeedPayload && payloadSecret?.let { it.length in 16..256 && isSafeSecret(it) } != true) ||
-                    verificationNonce != null || verificationCode != null || legacyPairingCode != null ||
+                    verificationNonce != null || verificationCode != null ||
                     (pairingId != null && pairingId != payloadId)
                 ) invalid(StateInvariantCode.INVALID_CANDIDATE, "Invalid advanced candidate")
             }
@@ -394,7 +384,7 @@ data class JournalEntry(
                 bodySha256 = sha256Hex(exactBodyBytes),
                 phase = JournalPhase.PREPARED,
                 operationId = null,
-                hostBootId = null,
+                hostBootId = host.lastObservedBootId,
                 createdAtMillis = nowMillis,
                 updatedAtMillis = nowMillis,
                 resultSummary = null,

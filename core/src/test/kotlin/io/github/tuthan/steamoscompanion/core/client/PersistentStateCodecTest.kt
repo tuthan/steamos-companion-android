@@ -16,7 +16,7 @@ import org.junit.Test
 class PersistentStateCodecTest {
     @Test
     fun roundTripsActiveCandidateSecretsAndExactJournalBody() {
-        val host = testActiveHost()
+        val host = testActiveHost().copy(lastObservedBootId = "00000000-0000-4000-8000-000000000001")
         val request = testPowerRequest()
         val body = BoundedJson.encode(request.body!!)
         val entry = JournalEntry.create(1, host, request, body, 1_790_000_000_000)
@@ -103,13 +103,13 @@ class PersistentStateCodecTest {
                 "revision" to current["revision"]!!,
                 "pairing_generation" to current["pairing_generation"]!!,
                 "active_host" to current["active_host"]!!,
-                "candidate" to JsonValue.ObjectValue(oldCandidate.fields.filterKeys { it !in v1OnlyFields }),
+                "candidate" to JsonValue.ObjectValue((oldCandidate.fields + ("legacy_pairing_code" to JsonValue.NullValue)).filterKeys { it !in v1OnlyFields }),
                 "journal" to current["journal"]!!,
             ),
         )
         val migrated = PersistentStateCodec.migrateKnownDocument(v1)!!
         val decoded = PersistentStateCodec.decodeCurrent(migrated)
-        assertEquals(2, decoded.schemaVersion)
+        assertEquals(3, decoded.schemaVersion)
         assertEquals(3, decoded.pairingGeneration)
         assertEquals("client-new", decoded.candidate!!.clientId)
         assertEquals(testCandidate().verificationNonce, decoded.candidate!!.verificationNonce)
@@ -150,13 +150,55 @@ class PersistentStateCodecTest {
                 "revision" to current["revision"]!!,
                 "pairing_generation" to current["pairing_generation"]!!,
                 "active_host" to current["active_host"]!!,
-                "candidate" to JsonValue.ObjectValue(oldCandidate.fields.filterKeys { it !in v1OnlyFields }),
+                "candidate" to JsonValue.ObjectValue((oldCandidate.fields + ("legacy_pairing_code" to JsonValue.NullValue)).filterKeys { it !in v1OnlyFields }),
                 "journal" to current["journal"]!!,
             ),
         )
         val migrated = PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(v1)!!)
         assertEquals(expiry, migrated.candidate!!.expiresAtMillis)
         assertEquals(expiry, migrated.candidate!!.payloadExpiresAtMillis)
+    }
+
+    @Test
+    fun schemaTwoAddsBootObservationAndDropsOnlyUnsupportedLegacyCandidate() {
+        val current = PersistentStateCodec.parseDocument(
+            PersistentStateCodec.encode(
+                PersistentState(
+                    pairingGeneration = 1,
+                    activeHost = testActiveHost().copy(lastObservedBootId = "new-boot"),
+                    candidate = testCandidate().copy(generation = 1),
+                ),
+            ),
+        )
+        val hostV2 = JsonValue.ObjectValue(current["active_host"]!!.asObject("active_host").fields - "last_observed_boot_id")
+        val candidateV2 = JsonValue.ObjectValue(
+            current["candidate"]!!.asObject("candidate").fields + ("legacy_pairing_code" to JsonValue.NullValue),
+        )
+        val v2 = JsonValue.ObjectValue(
+            linkedMapOf(
+                "schema_version" to JsonValue.NumberValue("2"),
+                "revision" to current["revision"]!!,
+                "pairing_generation" to current["pairing_generation"]!!,
+                "active_host" to hostV2,
+                "candidate" to candidateV2,
+                "journal" to current["journal"]!!,
+            ),
+        )
+        val migrated = PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(v2)!!)
+        assertEquals(3, migrated.schemaVersion)
+        assertEquals(null, migrated.activeHost!!.lastObservedBootId)
+        assertEquals("client-new", migrated.candidate!!.clientId)
+
+        val legacyCandidate = JsonValue.ObjectValue(
+            candidateV2.fields + mapOf(
+                "variant" to JsonValue.StringValue("legacy_code"),
+                "verification_nonce" to JsonValue.NullValue,
+                "verification_code" to JsonValue.NullValue,
+                "legacy_pairing_code" to JsonValue.StringValue("4821-3579"),
+            ),
+        )
+        val legacyV2 = JsonValue.ObjectValue(v2.fields + ("candidate" to legacyCandidate))
+        assertEquals(null, PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(legacyV2)!!).candidate)
     }
 
     @Test

@@ -181,6 +181,12 @@ class PairingCoordinator(
         }
         prepareVerificationCode(candidate)?.let { return@submit it }
         candidate = currentCandidate(candidate.generation) ?: return@submit PairingAction.StaleGeneration
+        if (candidate.phase in setOf(CandidatePhase.READY, CandidatePhase.PENDING, CandidatePhase.RATE_LIMITED) &&
+            candidate.expiresAtMillis?.let { it <= clock.wallTimeMillis() } == true
+        ) {
+            return@submit terminal(candidate.generation, CandidatePhase.EXPIRED)?.let(PairingAction::Expired)
+                ?: PairingAction.StaleGeneration
+        }
         when (candidate.phase) {
             CandidatePhase.REQUESTING -> update(candidate.generation) {
                 it.copy(phase = CandidatePhase.REQUEST_UNCONFIRMED)
@@ -189,11 +195,7 @@ class PairingCoordinator(
             }
             CandidatePhase.APPROVED_STAGED -> finalizeApproved(candidate.generation)
             CandidatePhase.PENDING, CandidatePhase.RATE_LIMITED -> {
-                if (candidate.expiresAtMillis?.let { it <= clock.wallTimeMillis() } == true) {
-                    terminal(candidate.generation, CandidatePhase.EXPIRED).let { result ->
-                        result?.let(PairingAction::Expired) ?: PairingAction.StaleGeneration
-                    }
-                } else if (candidate.pairingSession == null) {
+                if (candidate.pairingSession == null) {
                     terminal(candidate.generation, CandidatePhase.CREDENTIAL_UNCONFIRMED).let { result ->
                         result?.let { PairingAction.NeedsAttention(it, "Pairing could not be confirmed after the app restarted") }
                             ?: PairingAction.StaleGeneration
@@ -247,17 +249,15 @@ class PairingCoordinator(
                 else -> PairingAction.Rejected(candidate, "pairing_terminal", "Start a new pairing request")
             }
         }
-        if (candidate.variant == PairingVariant.LEGACY_CODE) {
-            return PairingAction.InputRejected("Client-chosen pairing codes are not accepted by the pinned host")
-        }
         prepareVerificationCode(candidate)?.let { return it }
         val readyCandidate = currentCandidate(candidate.generation) ?: return PairingAction.StaleGeneration
         val now = clock.wallTimeMillis()
+        if (readyCandidate.expiresAtMillis?.let { now >= it } == true) {
+            return terminal(readyCandidate.generation, CandidatePhase.EXPIRED)?.let(PairingAction::Expired)
+                ?: PairingAction.StaleGeneration
+        }
         readyCandidate.pollNotBeforeMillis?.let { if (now < it) return PairingAction.RateLimited(readyCandidate, it) }
         val payloadExpiry = readyCandidate.payloadExpiresAtMillis
-        if (payloadExpiry != null && payloadExpiry <= now) {
-            return terminal(readyCandidate.generation, CandidatePhase.EXPIRED)?.let(PairingAction::Expired) ?: PairingAction.StaleGeneration
-        }
         val localExpiry = safeAdd(now, PAIRING_WINDOW_MILLIS)
         val claim = transactions.updateCandidate(readyCandidate.generation) { current ->
             if (current.phase != CandidatePhase.READY) {
@@ -348,10 +348,14 @@ class PairingCoordinator(
 
     private fun pollBlocking(generation: Long, cancellation: CancellationSignal): PairingAction {
         val candidate = currentCandidate(generation) ?: return PairingAction.StaleGeneration
+        val now = clock.wallTimeMillis()
+        if (candidate.expiresAtMillis?.let { now >= it } == true) {
+            return terminal(generation, CandidatePhase.EXPIRED)?.let(PairingAction::Expired) ?: PairingAction.StaleGeneration
+        }
         when (candidate.phase) {
             CandidatePhase.RATE_LIMITED, CandidatePhase.PENDING -> {
-                val retryAt = candidate.pollNotBeforeMillis ?: clock.wallTimeMillis()
-                if (clock.wallTimeMillis() < retryAt) return PairingAction.RateLimited(candidate, retryAt)
+                val retryAt = candidate.pollNotBeforeMillis ?: now
+                if (now < retryAt) return PairingAction.RateLimited(candidate, retryAt)
             }
             CandidatePhase.APPROVED_STAGED -> return finalizeApproved(generation)
             CandidatePhase.REQUEST_UNCONFIRMED -> return PairingAction.RequestUnconfirmed(candidate)
@@ -360,10 +364,6 @@ class PairingCoordinator(
             CandidatePhase.CREDENTIAL_UNCONFIRMED -> return PairingAction.NeedsAttention(candidate, CREDENTIAL_UNCERTAINTY_MESSAGE)
             CandidatePhase.CANCELLED -> return PairingAction.Cancelled(true, true, "The host cancelled this request")
             else -> return PairingAction.Rejected(candidate, "pairing_terminal", "This pairing request cannot be polled")
-        }
-        val now = clock.wallTimeMillis()
-        if (candidate.expiresAtMillis?.let { now >= it } == true) {
-            return terminal(generation, CandidatePhase.EXPIRED)?.let(PairingAction::Expired) ?: PairingAction.StaleGeneration
         }
         if (candidate.pairingSession == null || candidate.pairingId == null) {
             return terminal(generation, CandidatePhase.CREDENTIAL_UNCONFIRMED)?.let {
@@ -512,7 +512,6 @@ class PairingCoordinator(
                 hostId = hostId,
                 verificationNonce = null,
                 verificationCode = null,
-                legacyPairingCode = null,
                 payloadSecret = null,
                 pairingSession = null,
                 stagedCredential = staged,
@@ -540,16 +539,16 @@ class PairingCoordinator(
     private fun initialRejection(candidate: PairingCandidate, error: String, message: String, retryAfterMillis: Long?): PairingAction {
         if (error == "rate_limited") {
             val wait = (retryAfterMillis ?: DEFAULT_RATE_LIMIT_DELAY_MILLIS).coerceAtLeast(0)
-            val retryAt = safeAdd(clock.wallTimeMillis(), wait)
+            val requestedRetryAt = safeAdd(clock.wallTimeMillis(), wait)
+            val retryAt = earlier(requestedRetryAt, candidate.expiresAtMillis) ?: requestedRetryAt
             val saved = update(candidate.generation) {
                 it.copy(
                     phase = CandidatePhase.READY,
                     pairingId = if (it.variant == PairingVariant.ADVANCED_PAYLOAD) it.payloadId else null,
                     pairingSession = null,
                     requestStartedAtMillis = null,
-                    localExpiresAtMillis = null,
                     hostExpiresAtMillis = null,
-                    expiresAtMillis = it.payloadExpiresAtMillis,
+                    expiresAtMillis = earlier(it.localExpiresAtMillis, it.payloadExpiresAtMillis),
                     pollNotBeforeMillis = retryAt,
                 )
             } ?: return PairingAction.StaleGeneration
@@ -564,7 +563,8 @@ class PairingCoordinator(
     private fun pollRejection(candidate: PairingCandidate, error: String, message: String, retryAfterMillis: Long?): PairingAction {
         if (error == "rate_limited") {
             val wait = (retryAfterMillis ?: DEFAULT_RATE_LIMIT_DELAY_MILLIS).coerceAtLeast(0)
-            val retryAt = safeAdd(clock.wallTimeMillis(), wait)
+            val retryAt = earlier(safeAdd(clock.wallTimeMillis(), wait), candidate.expiresAtMillis)
+                ?: safeAdd(clock.wallTimeMillis(), wait)
             val saved = update(candidate.generation) {
                 it.copy(phase = CandidatePhase.RATE_LIMITED, pollNotBeforeMillis = retryAt)
             } ?: return PairingAction.StaleGeneration
@@ -604,7 +604,12 @@ class PairingCoordinator(
                 pollNotBeforeMillis = null,
             )
         } ?: return PairingAction.StaleGeneration
-        return PairingAction.Retryable(saved, "Pairing request was not sent (${failure.name.lowercase()}); retry is safe")
+        val message = if (failure == TransportFailure.TLS12_REQUIRED) {
+            "This host does not offer TLS 1.2 for channel-bound pairing. TLS 1.3 does not provide the required tls-unique binding."
+        } else {
+            "Pairing request was not sent (${failure.name.lowercase()}); retry is safe"
+        }
+        return PairingAction.Retryable(saved, message)
     }
 
     private fun markUnconfirmed(generation: Long, pairingId: String?, hostExpiryMillis: Long?): PairingAction {
@@ -671,7 +676,6 @@ class PairingCoordinator(
             phase = phase,
             verificationNonce = null,
             verificationCode = null,
-            legacyPairingCode = null,
             payloadSecret = null,
             pairingSession = null,
             stagedCredential = null,

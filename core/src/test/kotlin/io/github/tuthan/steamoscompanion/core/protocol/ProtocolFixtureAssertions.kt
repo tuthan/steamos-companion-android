@@ -60,6 +60,30 @@ object ProtocolFixtureAssertions {
         assertTrue("$path should decode as v1", decoded is ApiReply.Versioned)
     }
 
+    fun assertEveryFixtureRequestAgainstAndroidValidator() {
+        index["cases"].asArray("cases").map { it.asObject("case") }.forEach { case ->
+            val name = case["case"].asString("case")
+            val relativeFile = case["file"].asString("file")
+            val fixture = source.json("fixtures/contract/$relativeFile")
+            val request = fixture["request"].asObject("request")
+            val methodText = request["method"].asString("request.method")
+            val path = request["path"].asString("request.path")
+            val body = (request["body"] as? JsonValue.ObjectValue)
+            val headers = request["headers"] as? JsonValue.ObjectValue
+            val authorization = headers?.fields?.entries?.firstOrNull { it.key.equals("authorization", ignoreCase = true) }
+                ?.value?.asString("authorization")
+            val bearer = authorization?.takeIf { it.startsWith("Bearer ") }?.removePrefix("Bearer ")
+            val route = runCatching { ApiRoute.match(HttpMethod.valueOf(methodText), path).route }.getOrNull()
+            val valid = runCatching {
+                ApiRequest(HttpMethod.valueOf(methodText), path, body, bearer).validate()
+            }.isSuccess
+            val status = fixture["response"].asObject("response")["status"].asLong("status").toInt()
+            val authShapeMatches = route != null && route.requiresBearer == !bearer.isNullOrBlank()
+            val expectedValid = status !in setOf(400, 405) && "pairing_code" !in body?.fields.orEmpty() && authShapeMatches
+            assertEquals("$name request body validation", expectedValid, valid)
+        }
+    }
+
     fun readResource(path: String): ByteArray = source.bytes(path)
 
     private class ProtocolResources {

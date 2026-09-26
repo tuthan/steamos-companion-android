@@ -111,15 +111,17 @@ class AndroidPersistenceTest {
 
     @Test
     fun abruptFirstWriteWithoutOldStateIsRemovedAndLoadsAsEmpty() {
+        File(baseFile.path + AndroidAtomicStateStore.FIRST_WRITE_MARKER_SUFFIX).writeBytes(byteArrayOf(1))
         val partial = AtomicFile(baseFile).startWrite()
         partial.write(byteArrayOf(0x53, 0x43, 0x41, 0x53, 0x01))
         partial.close()
         assertTrue(baseFile.exists() || File(baseFile.path + ".new").exists())
 
         val load = repository.load()
-        assertTrue(load == StateLoadResult.Empty || load == StateLoadResult.Unavailable(StateUnavailableReason.DAMAGED))
-        if (load is StateLoadResult.Unavailable) assertTrue(baseFile.exists())
+        assertEquals(StateLoadResult.Empty, load)
+        assertFalse(baseFile.exists())
         assertFalse(File(baseFile.path + ".new").exists())
+        assertFalse(File(baseFile.path + AndroidAtomicStateStore.FIRST_WRITE_MARKER_SUFFIX).exists())
     }
 
     @Test

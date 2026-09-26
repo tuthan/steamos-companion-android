@@ -163,6 +163,50 @@ class DiscoveryScannerTest {
         }
     }
 
+    @Test
+    fun manualAddressProbeGetsFiveSecondsIndependentlyOfDiscoveryProbeBudget() {
+        val path = path("wifi", "192.168.1.5", 24)
+        var receivedBudget = 0L
+        val probe = object : DiscoveryProbe {
+            override fun probe(target: TransportTarget, cancellation: CancellationSignal) =
+                DiscoveryProbeResult.Failed(TransportFailure.CONNECT)
+
+            override fun probe(target: TransportTarget, cancellation: CancellationSignal, budgetMillis: Long): DiscoveryProbeResult {
+                receivedBudget = budgetMillis
+                return DiscoveryProbeResult.Failed(TransportFailure.CONNECT)
+            }
+        }
+        val scanner = DiscoveryScanner(networkAccess(path), probe)
+        try {
+            assertTrue(scanner.probeManual("deck.local:18443", path) is ManualProbeResult.Failed)
+            assertEquals(5_000L, receivedBudget)
+        } finally {
+            scanner.close()
+        }
+    }
+
+    @Test
+    fun api36CompatibilityScanUsesTheThreeSecondGlobalBudget() {
+        val entered = CountDownLatch(1)
+        val probe = DiscoveryProbe { _, cancellation ->
+            entered.countDown()
+            while (!cancellation.isCancelled) Thread.sleep(5)
+            DiscoveryProbeResult.Failed(TransportFailure.CANCELLED)
+        }
+        val scanner = DiscoveryScanner(networkAccess(path("wifi", "192.168.1.5", 24)), probe)
+        try {
+            val startedAt = System.nanoTime()
+            val result = scanner.scan(budgetMillis = DiscoveryScanner.API36_LEGACY_SCAN_BUDGET_MS)
+            val elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+            assertTrue(entered.await(1, TimeUnit.SECONDS))
+            assertTrue(result.timedOut)
+            assertTrue(elapsedMillis in 2_500L..4_500L)
+            assertTrue(result.addressesProbed in 1..DiscoveryScanner.MAX_CONCURRENT_PROBES)
+        } finally {
+            scanner.close()
+        }
+    }
+
     private fun path(id: String, local: String, prefix: Int): LanPath {
         val address = InetAddress.getByName(local) as Inet4Address
         return LanPath(

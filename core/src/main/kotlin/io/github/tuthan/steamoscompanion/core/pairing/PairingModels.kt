@@ -263,6 +263,5 @@ object PairingRequestBuilder {
     fun request(candidate: PairingCandidate) = when (candidate.variant) {
         PairingVariant.VERIFICATION -> PairingRequestBuilder.verification(candidate)
         PairingVariant.ADVANCED_PAYLOAD -> PairingRequestBuilder.payload(candidate)
-        PairingVariant.LEGACY_CODE -> throw PairingInputException("Legacy client-chosen pairing codes are not supported")
     }
 }

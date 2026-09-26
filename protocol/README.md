@@ -5,6 +5,8 @@ wire contract for the Decky host and the separate Omarchy client. The host
 build packages this directory. The client build consumes a pinned copy; it
 does not import a sibling checkout at runtime.
 
+`fixtures/pairing-payload.json` is the deterministic QR payload wire fixture. It is generated from the host `encode_payload` / `decode_payload` implementation, checked against those functions in `tests/test_protocol.py`, and included in the host bundle.
+
 The contract deliberately exposes only enumerated operations. It never carries
 raw Steam payloads, arbitrary methods, PIDs, service names, paths, commands,
 credentials, or Sunshine Web UI administration.

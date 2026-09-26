@@ -23,7 +23,7 @@ object PersistentStateCodec {
     fun encode(state: PersistentState): ByteArray {
         val bytes = BoundedJson.encode(toJson(state.validated()))
         if (bytes.size > PersistentStateLimits.MAX_PLAINTEXT_BYTES) {
-            throw StateInvariantException(StateInvariantCode.INVALID_FIELD, "Saved state exceeds 64 KiB")
+            throw StateInvariantException(StateInvariantCode.STATE_TOO_LARGE, "Saved state exceeds 64 KiB")
         }
         return bytes
     }
@@ -57,7 +57,7 @@ object PersistentStateCodec {
         }
     }
 
-    /** Migrate the empty pre-release v0 state and the storage-only v1 state to the pairing schema. */
+    /** Migrate known legacy schemas to v3, dropping the unsupported pairing-code candidate form. */
     fun migrateKnownDocument(document: JsonValue.ObjectValue): JsonValue.ObjectValue? {
         return when (schemaVersion(document)) {
             0L -> {
@@ -69,7 +69,7 @@ object PersistentStateCodec {
                 }
                 JsonValue.ObjectValue(
                     linkedMapOf(
-                        "schema_version" to number(2),
+                        "schema_version" to number(3),
                         "revision" to document["revision"].asLong("revision").asJson(),
                         "pairing_generation" to number(0),
                         "active_host" to JsonValue.NullValue,
@@ -81,19 +81,53 @@ object PersistentStateCodec {
             1L -> {
                 document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
                 val candidate = document["candidate"].nullableObject("candidate")?.let(::migrateCandidateV1)
-                JsonValue.ObjectValue(
+                migrateSchema2Document(JsonValue.ObjectValue(
                     linkedMapOf(
-                        "schema_version" to number(2),
+                        "schema_version" to number(3),
                         "revision" to document["revision"]!!,
                         "pairing_generation" to document["pairing_generation"]!!,
                         "active_host" to document["active_host"]!!,
                         "candidate" to (candidate ?: JsonValue.NullValue),
                         "journal" to document["journal"]!!,
                     ),
-                )
+                ))
             }
+            2L -> migrateSchema2Document(document)
             else -> null
         }
+    }
+
+    private fun migrateSchema2Document(document: JsonValue.ObjectValue): JsonValue.ObjectValue {
+        document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
+        val activeHost = document["active_host"].nullableObject("active_host")?.let { host ->
+            host.exactKeys("host_id", "client_id", "endpoint", "certificate_pin", "bearer_token", "granted_scopes", "wake_target", "paired_at_ms")
+            JsonValue.ObjectValue(LinkedHashMap(host.fields).apply { put("last_observed_boot_id", JsonValue.NullValue) })
+        }
+        val candidate = document["candidate"].nullableObject("candidate")?.let { value ->
+            value.exactKeys(
+                "generation", "variant", "client_id", "client_name", "requested_scopes", "endpoint", "certificate_pin", "host_id",
+                "created_at_ms", "expires_at_ms", "phase", "verification_nonce", "verification_code", "legacy_pairing_code", "payload_id", "payload_secret",
+                "pairing_id", "pairing_session", "staged_credential", "network_id", "request_started_at_ms", "local_expires_at_ms",
+                "host_expires_at_ms", "payload_expires_at_ms", "poll_not_before_ms",
+            )
+            val variant = value["variant"]?.asString("variant")
+            if (variant == "legacy_code") {
+                // It is an unsubmitted local request that this client can no longer send.
+                null
+            } else {
+                JsonValue.ObjectValue(LinkedHashMap(value.fields).apply { remove("legacy_pairing_code") })
+            }
+        }
+        return JsonValue.ObjectValue(
+            linkedMapOf(
+                "schema_version" to number(3),
+                "revision" to document["revision"]!!,
+                "pairing_generation" to document["pairing_generation"]!!,
+                "active_host" to (activeHost ?: JsonValue.NullValue),
+                "candidate" to (candidate ?: JsonValue.NullValue),
+                "journal" to document["journal"]!!,
+            ),
+        )
     }
 
     private fun migrateCandidateV1(value: JsonValue.ObjectValue): JsonValue.ObjectValue {
@@ -140,6 +174,7 @@ object PersistentStateCodec {
         "granted_scopes" to array(host.grantedScopes.map(::string)),
         "wake_target" to encodeWakeTarget(host.wakeTarget),
         "paired_at_ms" to host.pairedAtMillis.asJson(),
+        "last_observed_boot_id" to host.lastObservedBootId.asJsonOrNull(),
     )
 
     private fun encodeWakeTarget(target: StoredWakeTarget) = obj(
@@ -164,7 +199,6 @@ object PersistentStateCodec {
         "phase" to string(candidate.phase.wireValue),
         "verification_nonce" to candidate.verificationNonce.asJsonOrNull(),
         "verification_code" to candidate.verificationCode.asJsonOrNull(),
-        "legacy_pairing_code" to candidate.legacyPairingCode.asJsonOrNull(),
         "payload_id" to candidate.payloadId.asJsonOrNull(),
         "payload_secret" to candidate.payloadSecret.asJsonOrNull(),
         "pairing_id" to candidate.pairingId.asJsonOrNull(),
@@ -208,7 +242,7 @@ object PersistentStateCodec {
     )
 
     private fun JsonValue.ObjectValue.decodeActiveHost(): ActiveHost {
-        exactKeys("host_id", "client_id", "endpoint", "certificate_pin", "bearer_token", "granted_scopes", "wake_target", "paired_at_ms")
+        exactKeys("host_id", "client_id", "endpoint", "certificate_pin", "bearer_token", "granted_scopes", "wake_target", "paired_at_ms", "last_observed_boot_id")
         return ActiveHost(
             hostId = this["host_id"].asString("host_id"),
             clientId = this["client_id"].asString("client_id"),
@@ -218,6 +252,7 @@ object PersistentStateCodec {
             grantedScopes = this["granted_scopes"].asArray("granted_scopes").map { it.asString("scope") },
             wakeTarget = this["wake_target"].asObject("wake_target").decodeWakeTarget(),
             pairedAtMillis = this["paired_at_ms"].asLong("paired_at_ms"),
+            lastObservedBootId = this["last_observed_boot_id"].nullableString("last_observed_boot_id"),
         )
     }
 
@@ -235,7 +270,7 @@ object PersistentStateCodec {
     private fun JsonValue.ObjectValue.decodeCandidate(): PairingCandidate {
         exactKeys(
             "generation", "variant", "client_id", "client_name", "requested_scopes", "endpoint", "certificate_pin", "host_id",
-            "created_at_ms", "expires_at_ms", "phase", "verification_nonce", "verification_code", "legacy_pairing_code", "payload_id", "payload_secret",
+            "created_at_ms", "expires_at_ms", "phase", "verification_nonce", "verification_code", "payload_id", "payload_secret",
             "pairing_id", "pairing_session", "staged_credential", "network_id", "request_started_at_ms", "local_expires_at_ms",
             "host_expires_at_ms", "payload_expires_at_ms", "poll_not_before_ms",
         )
@@ -257,7 +292,6 @@ object PersistentStateCodec {
             phase = phase,
             verificationNonce = this["verification_nonce"].nullableString("verification_nonce"),
             verificationCode = this["verification_code"].nullableString("verification_code"),
-            legacyPairingCode = this["legacy_pairing_code"].nullableString("legacy_pairing_code"),
             payloadId = this["payload_id"].nullableString("payload_id"),
             payloadSecret = this["payload_secret"].nullableString("payload_secret"),
             pairingId = this["pairing_id"].nullableString("pairing_id"),

@@ -1,0 +1,13 @@
+{
+  "decoded_payload": {
+    "certificate_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "endpoint": "https://192.0.2.10:18443",
+    "expires_at": 1790000120,
+    "host_id": "host-fixture0001xxxxxxxxxxxxx",
+    "pairing_id": "pair-fixture0001xxxxxxxxxxxxx",
+    "protocol_version": 1,
+    "secret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+  },
+  "payload": "steamos-companion:v1:eyJjZXJ0aWZpY2F0ZV9maW5nZXJwcmludCI6InNoYTI1NjphYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiZW5kcG9pbnQiOiJodHRwczovLzE5Mi4wLjIuMTA6MTg0NDMiLCJleHBpcmVzX2F0IjoxNzkwMDAwMTIwLCJob3N0X2lkIjoiaG9zdC1maXh0dXJlMDAwMXh4eHh4eHh4eHh4eHgiLCJwYWlyaW5nX2lkIjoicGFpci1maXh0dXJlMDAwMXh4eHh4eHh4eHh4eHgiLCJwcm90b2NvbF92ZXJzaW9uIjoxLCJzZWNyZXQiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R4QVJFaE1VRlJZWEdCa2FHeHdkSGg4In0",
+  "protocol_version": 1
+}

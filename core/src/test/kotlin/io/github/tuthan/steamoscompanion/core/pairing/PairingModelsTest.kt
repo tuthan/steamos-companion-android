@@ -7,6 +7,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
+import io.github.tuthan.steamoscompanion.core.protocol.asString
 import io.github.tuthan.steamoscompanion.core.protocol.jsonObject
 import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
@@ -54,6 +55,19 @@ class PairingModelsTest {
     }
 
     @Test
+    fun hostBundledQrPayloadFixtureParsesWithTheAndroidClientValidator() {
+        val fixture = javaClass.classLoader.getResourceAsStream("fixtures/pairing-payload.json")!!
+            .use { BoundedJson.parseObject(it.readBytes()) }
+        val payload = fixture["payload"].asString("payload")
+        val parsed = PairingPayloadParser.parse(payload, TEST_NOW)
+
+        assertEquals("192.0.2.10:18443", parsed.endpoint)
+        assertEquals("host-fixture0001xxxxxxxxxxxxx", parsed.hostId)
+        assertEquals("pair-fixture0001xxxxxxxxxxxxx", parsed.pairingId)
+        assertEquals(TEST_NOW + 120_000, parsed.expiresAtMillis)
+    }
+
+    @Test
     fun payloadDecoderRejectsDuplicateJsonKeysWrongIdsBadPinsAndNonFiniteExpiry() {
         val duplicate = """{"protocol_version":1,"protocol_version":1,"endpoint":"deck.local:18443","host_id":"$TEST_HOST","certificate_fingerprint":"$TEST_PIN","pairing_id":"$TEST_PAIRING_ID","secret":"fixture-payload-secret-001","expires_at":1790000060}"""
         assertThrows(PairingInputException::class.java) { PairingPayloadParser.parse(payloadText(duplicate.toByteArray(Charsets.UTF_8)), TEST_NOW) }
@@ -86,8 +100,9 @@ class PairingModelsTest {
         )
         val nonceBody = PairingRequestBuilder.request(nonceCandidate)
         assertEquals(setOf("verification_nonce", "client_id", "client_name", "scopes"), nonceBody.fields.keys)
-        assertTrue(nonceCandidate.verificationCode!!.matches(Regex("[0-9]{8}")))
-        assertFalse(BoundedJson.encode(nonceBody).toString(Charsets.UTF_8).contains(nonceCandidate.verificationCode!!))
+        val verificationCode = requireNotNull(nonceCandidate.verificationCode)
+        assertTrue(verificationCode.matches(Regex("[0-9]{8}")))
+        assertFalse(BoundedJson.encode(nonceBody).toString(Charsets.UTF_8).contains(verificationCode))
         ApiRequest(HttpMethod.POST, ApiRoute.PAIR_REQUEST.path, nonceBody).validate()
 
         val pollBody = PairingRequestBuilder.request(nonceCandidate.copy(pairingSession = TEST_SESSION))

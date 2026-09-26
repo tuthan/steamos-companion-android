@@ -47,6 +47,63 @@ class OperationJournalTest {
     }
 
     @Test
+    fun lastObservedBootIdIsPersistedAndCopiedIntoThePreparedJournalEntry() {
+        val (_, _, repository, journal) = fixture()
+        val host = testActiveHost()
+        assertTrue(repository.transact { it.copy(activeHost = host) } is StateCommitResult.Saved)
+        val observed = repository.recordObservedBootId(host, "00000000-0000-4000-8000-000000000001") as StateCommitResult.Saved
+        assertEquals("00000000-0000-4000-8000-000000000001", observed.state.activeHost!!.lastObservedBootId)
+
+        val dispatched = journal.dispatch(testPowerRequest("boot-id-capture")) { _, _, _ ->
+            val prepared = (repository.load() as StateLoadResult.Ready).state.journal.single()
+            assertEquals("00000000-0000-4000-8000-000000000001", prepared.hostBootId)
+            RequestOutcome.NotSent(TransportFailure.IO)
+        } as JournalDispatchResult.Finished
+        assertEquals("00000000-0000-4000-8000-000000000001", dispatched.entry.hostBootId)
+    }
+
+    @Test
+    fun aSizeOverflowWithOnlyUnresolvedEntriesIsRejectedAsHistoryFullBeforeDispatch() {
+        val (_, _, repository, journal, clock) = fixture()
+        val host = testActiveHost()
+        val entries = (1..PersistentStateLimits.MAX_JOURNAL_ENTRIES).map { index ->
+            val request = largeDisplayOrderRequest(host, "large-$index")
+            JournalEntry.create(
+                localGeneration = index.toLong(),
+                host = host,
+                request = request,
+                exactBodyBytes = io.github.tuthan.steamoscompanion.core.protocol.BoundedJson.encode(request.body!!),
+                nowMillis = clock.wallTimeMillis(),
+            ).copy(phase = JournalPhase.UNKNOWN, resultSummary = "x".repeat(1_024))
+        }
+        val newRequest = testPowerRequest("size-boundary-new")
+        fun newEntry(generation: Long) = JournalEntry.create(
+            localGeneration = generation,
+            host = host,
+            request = newRequest,
+            exactBodyBytes = io.github.tuthan.steamoscompanion.core.protocol.BoundedJson.encode(newRequest.body!!),
+            nowMillis = clock.wallTimeMillis(),
+        ).copy(phase = JournalPhase.UNKNOWN, resultSummary = "x")
+        val fittingCount = (1 until entries.size).firstOrNull { count ->
+            val current = PersistentState(activeHost = host, journal = entries.take(count))
+            val next = current.copy(journal = current.journal + newEntry(count.toLong() + 1))
+            runCatching { PersistentStateCodec.encode(current) }.isSuccess &&
+                runCatching { PersistentStateCodec.encode(next) }.isFailure
+        }
+        assertTrue("fixture needs a state below 64 KiB whose next entry crosses the cap", fittingCount != null)
+        val initial = PersistentState(activeHost = host, journal = entries.take(requireNotNull(fittingCount)))
+        assertTrue(repository.transact { initial } is StateCommitResult.Saved)
+
+        var sent = false
+        val result = journal.dispatch(newRequest) { _, _, _ ->
+            sent = true
+            RequestOutcome.NotSent(TransportFailure.IO)
+        }
+        assertEquals(StateInvariantCode.HISTORY_FULL, (result as JournalDispatchResult.NotDispatched).code)
+        assertFalse(sent)
+    }
+
+    @Test
     fun preDispatchStorageFailureNeverCallsSender() {
         val (store, _, repository, journal) = fixture()
         repository.transact { it.copy(activeHost = testActiveHost()) }
@@ -354,6 +411,20 @@ class OperationJournalTest {
         ),
         202,
         null,
+    )
+
+    private fun largeDisplayOrderRequest(host: ActiveHost, requestId: String) = io.github.tuthan.steamoscompanion.core.protocol.ApiRequest(
+        io.github.tuthan.steamoscompanion.core.protocol.HttpMethod.POST,
+        "/v1/display/order",
+        jsonObject(
+            "request_id" to JsonValue.StringValue(requestId),
+            "output_keys" to JsonValue.ArrayValue((1..8).map { index ->
+                JsonValue.StringValue("output-key-$index-" + "x".repeat(115))
+            }),
+            "generation" to JsonValue.NumberValue("7"),
+            "restart" to JsonValue.BooleanValue(false),
+        ),
+        host.bearerToken,
     )
 
     private fun revokeSucceeded(operationId: String, requestId: String) = RequestOutcome.Reply(

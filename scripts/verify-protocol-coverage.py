@@ -16,6 +16,9 @@ PROTOCOL = ROOT / "protocol"
 INVENTORY = ROOT / "docs" / "protocol-coverage.md"
 KOTLIN_TESTS = ROOT / "core" / "src" / "test" / "kotlin"
 INDEX = "fixtures/contract/index.json"  # the fixture catalogue itself, not a case
+STANDALONE_FIXTURES = {
+    "fixtures/pairing-payload.json": ("PairingModelsTest", "hostBundledQrPayloadFixtureParsesWithTheAndroidClientValidator"),
+}
 
 # The closed route set dispatched by host/backend/service.py handle_http at the pinned commit.
 PINNED_ROUTES = {
@@ -67,7 +70,14 @@ def main() -> None:
         rows.append((number, match))
 
     covered_routes = set()
-    claimed = set()
+    claimed = set(STANDALONE_FIXTURES)
+    for fixture, (test_class_name, method_name) in STANDALONE_FIXTURES.items():
+        if fixture not in pinned:
+            errors.append(f"standalone fixture {fixture} is not hash-pinned in SOURCE.json")
+        if not (PROTOCOL / fixture).is_file():
+            errors.append(f"standalone fixture {fixture} does not exist")
+        if (test_class_name, method_name) not in declared_tests:
+            errors.append(f"standalone fixture {fixture} has no Kotlin test {test_class_name}.{method_name}")
     for number, row in rows:
         route = row["route"]
         if route not in PINNED_ROUTES:

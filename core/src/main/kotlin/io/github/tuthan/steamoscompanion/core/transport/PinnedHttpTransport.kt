@@ -41,6 +41,7 @@ import org.bouncycastle.tls.ServerOnlyTlsAuthentication
 import org.bouncycastle.tls.TlsAuthentication
 import org.bouncycastle.tls.TlsClientProtocol
 import org.bouncycastle.tls.TlsFatalAlert
+import org.bouncycastle.tls.TlsFatalAlertReceived
 import org.bouncycastle.tls.TlsServerCertificate
 import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto
 
@@ -60,7 +61,7 @@ sealed interface DiscoveryProbeResult {
     data class Failed(val failure: TransportFailure) : DiscoveryProbeResult
 }
 
-enum class TransportFailure { VALIDATION, PERMISSION, DNS, CONNECT, PIN, CANCELLED, TIMEOUT, IO, PROTOCOL }
+enum class TransportFailure { VALIDATION, PERMISSION, DNS, CONNECT, PIN, TLS12_REQUIRED, CANCELLED, TIMEOUT, IO, PROTOCOL }
 
 sealed interface RequestOutcome {
     /** A 2xx response has been fully framed, parsed, and decoded. 202 still means accepted, not completed. */
@@ -89,10 +90,12 @@ class PinnedHttpTransport(
     fun probeDiscovery(
         target: TransportTarget,
         cancellation: CancellationSignal? = null,
+        budgetMillis: Long = DISCOVERY_PROBE_BUDGET_MS,
     ): DiscoveryProbeResult {
+        require(budgetMillis in 1..MAX_DISCOVERY_PROBE_BUDGET_MS)
         val request = ApiRequest(HttpMethod.GET, ApiRoute.DISCOVERY.path)
         val scope = try {
-            RequestDeadline(clock, DISCOVERY_PROBE_BUDGET_MS, cancellation)
+            RequestDeadline(clock, budgetMillis, cancellation)
         } catch (_: RequestCancelledException) {
             return DiscoveryProbeResult.Failed(TransportFailure.CANCELLED)
         }
@@ -295,7 +298,7 @@ class PinnedHttpTransport(
             protocol.connect(client)
             scope.check()
             if (client.resumed()) throw IOException("Pairing bootstrap must use a full TLS handshake")
-            val binding = client.binding() ?: throw IOException("TLS 1.2 channel binding is unavailable")
+            val binding = client.binding() ?: throw Tls12RequiredException()
             if (binding.size < MIN_BINDING_BYTES) throw IOException("TLS channel binding is too short")
             val headerValue = Base64.getUrlEncoder().encodeToString(binding)
             Http1RequestWriter.write(protocol.outputStream, endpoint, request, body, headerValue, scope, beforeWrite)
@@ -372,6 +375,11 @@ class PinnedHttpTransport(
             return TransportFailure.TIMEOUT
         }
         if (isPinFailure(error)) return TransportFailure.PIN
+        if (error is Tls12RequiredException || generateSequence(error) { it.cause }.any {
+                (it is TlsFatalAlert && it.alertDescription == AlertDescription.protocol_version) ||
+                    (it is TlsFatalAlertReceived && it.alertDescription == AlertDescription.protocol_version)
+            }
+        ) return TransportFailure.TLS12_REQUIRED
         if (error is SecurityException || generateSequence(error) { it.cause }.any { it is SecurityException }) return TransportFailure.PERMISSION
         if (error is UnknownHostException) return TransportFailure.DNS
         if (error is HttpFramingException || error is io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException) {
@@ -390,6 +398,7 @@ class PinnedHttpTransport(
         const val APPROVAL_POLL_BUDGET_MS = 2_500L
         const val STATUS_BUDGET_MS = 2_500L
         const val DISCOVERY_PROBE_BUDGET_MS = 750L
+        const val MAX_DISCOVERY_PROBE_BUDGET_MS = 5_000L
         const val MIN_BINDING_BYTES = 12
         const val PIN_MISMATCH_MESSAGE = "Pinned server certificate does not match"
         private val PIN = Regex("sha256:[0-9a-f]{64}")
@@ -397,6 +406,8 @@ class PinnedHttpTransport(
         private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
     }
 }
+
+private class Tls12RequiredException : IOException("The host does not offer TLS 1.2 for channel-bound pairing")
 
 private class PinnedBootstrapClient(crypto: BcTlsCrypto, private val pin: String) : DefaultTlsClient(crypto) {
     fun binding(): ByteArray? = context.exportChannelBinding(ChannelBinding.tls_unique)

@@ -8,6 +8,11 @@ import org.junit.Assert.assertThrows
 
 class ProtocolValidationTest {
     @Test
+    fun requestBodiesFromEveryPinnedFixtureAreCheckedByTheAndroidValidator() {
+        ProtocolFixtureAssertions.assertEveryFixtureRequestAgainstAndroidValidator()
+    }
+
+    @Test
     fun endpointAcceptsHostOnlyAndRejectsUrlComponents() {
         assertEquals("deck.local:18443", HostEndpoint.parse("deck.local").authority)
         assertEquals("192.168.1.20:1234", HostEndpoint.parse("https://192.168.1.20:1234").authority)

@@ -1,12 +1,8 @@
 {
-  "repository": "https://github.com/tuthan/steamos-companion-decky",
-  "tag": null,
   "branch": "protocol/android-contract-fixtures",
-  "commit": "4c35efb294e689a0451caecf3cb2e3fddcde7555",
-  "protocol_tree": "1ebaf97d4645b145ccdd937a0d3a2663c84b7636",
-  "host_behavior": "v0.5.16 (9c213b31cdce36e67784355be21e2fc1b2b7570f); git diff v0.5.16 4c35efb -- host is empty",
+  "commit": "804ebf1864f391358183dfcd1cacf61e289862e8",
   "files": {
-    "README.md": "744502f03d1827fc8f35739330fdb275388e1fd3cc1505b5f5e8bf90f73b310e",
+    "README.md": "9d84bb7367c4204d1d5cb2337f922ed37da749881f71ebd2ae13595597e07073",
     "fixtures/contract/discovery/ready.json": "3591c0548215e59eac8c0e61f4794e83d1a491cfd4228a446120113c238d192f",
     "fixtures/contract/discovery/tls-unavailable.json": "ae4944c0df16e607dadecebf2b25bec83373dc557a1dd3fb160eb3f062bbea3b",
     "fixtures/contract/display-confirm/confirmed.json": "5a4f08ea393161b9d2cbfb72be8f1c8713dfa6fff6dd524a1e0cb208cae80f35",
@@ -143,11 +139,16 @@
     "fixtures/contract/unsupported/unknown-path-get-unauthenticated.json": "32beed5010b30eb6f0477e1e93d79d289a446b4ec189463ec16a963398ba2b2c",
     "fixtures/contract/unsupported/unknown-path-post.json": "fd098917e40c6a4589848a41ebb7142ae982b0bb7c18a6354f5c98d659a4465a",
     "fixtures/outputs-working.json": "98cbae01655efaf97724bdea5c3d956cbf747e3d55c27bbf8e3639d74f26bafc",
+    "fixtures/pairing-payload.json": "5124857c831902ba77d7afb4337b815a4d9b849560c30a7e31375403dbda88ae",
     "fixtures/status-steam-unavailable.json": "edb304a0fc2f61abad45bfc539d960bfb86e3ff28a720a7e030c61f63d40dcaf",
     "fixtures/status-sunshine-disabled.json": "ce7087ee9989b8351cea3b7fd32be4f431c9306715a8a9cb6d47e9fda3a68149",
     "fixtures/status-sunshine-running.json": "0e62ff74c77127a3c9bba76318c2aeb3bc2312c620daa327296a05ebcd210823",
     "fixtures/status-sunshine-stopped.json": "b57b9a4e1438907bc70bc59dd80ff9e2287537c87c7b92b216c3dffde30754ee",
     "fixtures/status-sunshine-unknown.json": "54cb9ca7d0d0529a51b26ac76d6468092ae029f731d4b39e8eddfe0f70776a59",
     "schema.json": "1e0331c2da1d0ddedbcd14ee075e5da7322b86c16b97e60bbc2622d6a21f5485"
-  }
+  },
+  "host_behavior": "v0.5.16 (9c213b31cdce36e67784355be21e2fc1b2b7570f); host/backend unchanged in protocol fixture commit 804ebf1864f391358183dfcd1cacf61e289862e8",
+  "protocol_tree": "4b661630f69bf7f2752862112f7f35288f571b18",
+  "repository": "https://github.com/tuthan/steamos-companion-decky",
+  "tag": null
 }

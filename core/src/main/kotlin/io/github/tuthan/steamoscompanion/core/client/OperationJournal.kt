@@ -124,7 +124,6 @@ class OperationJournal(
             if (pruned.any { it.hostId == host.hostId && it.clientId == host.clientId && it.requestId == request.requestId() }) {
                 throw StateInvariantException(StateInvariantCode.DUPLICATE_REQUEST_ID, "Request ID is already journaled")
             }
-            val room = makeRoom(pruned)
             val entry = JournalEntry.create(
                 localGeneration = nextLocalGeneration(state),
                 host = host,
@@ -132,9 +131,15 @@ class OperationJournal(
                 exactBodyBytes = encoded.body,
                 nowMillis = now,
             )
+            val nextState = target.state.copy(
+                schemaVersion = PersistentStateLimits.CURRENT_SCHEMA_VERSION,
+                revision = state.revision + 1,
+                journal = pruned + entry,
+            )
+            val room = makeRoom(nextState)
             preparedEntry = entry
             preparedTarget = target
-            target.state.copy(journal = room + entry)
+            target.state.copy(journal = room)
         }
 
         when (preparedCommit) {
@@ -278,16 +283,24 @@ class OperationJournal(
         !it.phase.unresolved && now >= it.updatedAtMillis && now - it.updatedAtMillis >= TERMINAL_RETENTION_MILLIS
     }
 
-    private fun makeRoom(entries: List<JournalEntry>): List<JournalEntry> {
-        val room = entries.toMutableList()
-        while (room.size >= PersistentStateLimits.MAX_JOURNAL_ENTRIES) {
+    private fun makeRoom(proposedState: PersistentState): List<JournalEntry> {
+        val room = proposedState.journal.toMutableList()
+        while (true) {
+            val candidate = proposedState.copy(journal = room)
+            val fitsLimits = try {
+                PersistentStateCodec.encode(candidate)
+                room.size <= PersistentStateLimits.MAX_JOURNAL_ENTRIES
+            } catch (error: StateInvariantException) {
+                if (error.code != StateInvariantCode.STATE_TOO_LARGE && error.code != StateInvariantCode.HISTORY_FULL) throw error
+                false
+            }
+            if (fitsLimits) return room
             val removableIndex = room.indices
                 .filter { index -> !room[index].phase.unresolved || room[index].acknowledged }
                 .minByOrNull { room[it].updatedAtMillis }
                 ?: throw StateInvariantException(StateInvariantCode.HISTORY_FULL, "Operation history is full; review unresolved actions")
             room.removeAt(removableIndex)
         }
-        return room
     }
 
     private fun applyOutcome(entry: JournalEntry, outcome: RequestOutcome, now: Long): JournalEntry = when (outcome) {

@@ -119,6 +119,50 @@ class PairingCoordinatorTest {
     }
 
     @Test
+    fun latePayloadApprovalAfterLocalCancelCannotRestoreCredentials() {
+        val enteredPoll = CountDownLatch(1)
+        val releasePoll = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(3)
+        try {
+            val rig = rig(
+                handler = { candidate, request, _ ->
+                    if ("pairing_session" !in request.body!!.fields) {
+                        pendingReply(pairingId = requireNotNull(candidate.pairingId))
+                    } else {
+                        enteredPoll.countDown()
+                        assertTrue(releasePoll.await(5, TimeUnit.SECONDS))
+                        approvedReply(
+                            pairingId = requireNotNull(candidate.pairingId),
+                            clientId = candidate.clientId,
+                            scopes = candidate.requestedScopes,
+                        )
+                    }
+                },
+                executor = java.util.concurrent.Executor { command -> pool.execute(command) },
+            )
+            val pending = rig.coordinator.startPayload(payloadText(TEST_NOW + 60_000), "wifi-1").join() as PairingAction.Pending
+            rig.clock.now += 2_000
+            val poll = rig.coordinator.poll(pending.candidate.generation)
+            assertTrue(enteredPoll.await(5, TimeUnit.SECONDS))
+
+            val cancelled = rig.coordinator.cancel(pending.candidate.generation).get(5, TimeUnit.SECONDS) as PairingAction.Cancelled
+            assertTrue(cancelled.localOnly)
+            assertFalse(cancelled.remoteConfirmed)
+            releasePoll.countDown()
+
+            assertTrue(poll.get(5, TimeUnit.SECONDS) is PairingAction.StaleGeneration)
+            val state = (rig.repository.load() as StateLoadResult.Ready).state
+            assertNull(state.candidate)
+            assertNull(state.activeHost)
+            assertEquals(2, rig.gateway.requests.size)
+            assertTrue(rig.gateway.requests.none { it.path == ApiRoute.PAIR_CANCEL.path })
+        } finally {
+            releasePoll.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
     fun lostInitialReplySurvivesAsUnconfirmedAndNeverRetriesAutomatically() {
         val rig = rig(handler = { _, _, _ -> unconfirmedReply() })
         val result = rig.coordinator.startNonce(discovery()).join() as PairingAction.RequestUnconfirmed
@@ -265,6 +309,70 @@ class PairingCoordinatorTest {
         rig.clock.now += 8_000
         assertTrue(rig.coordinator.poll(pending.candidate.generation).join() is PairingAction.Pending)
         assertEquals(4, rig.gateway.requests.size)
+    }
+
+    @Test
+    fun retryAfterPastPairingExpiryResumesAsExpiredWithoutAnotherPoll() {
+        val rig = rig(handler = { candidate, request, _ ->
+            if ("pairing_session" !in request.body!!.fields) {
+                pendingReply(expiresAtMillis = TEST_NOW + 3_000)
+            } else {
+                RequestOutcome.Rejected(ApiReply.Rejected(429, "rate_limited", "poll rate limit exceeded"), 10_000)
+            }
+        })
+        val pending = rig.coordinator.startNonce(discovery()).join() as PairingAction.Pending
+        rig.clock.now += 2_000
+        val limited = rig.coordinator.poll(pending.candidate.generation).join() as PairingAction.RateLimited
+        assertEquals(TEST_NOW + 3_000, limited.retryAtMillis)
+        assertEquals(2, rig.gateway.requests.size)
+
+        rig.clock.now = TEST_NOW + 3_000
+        val resumed = rig.coordinator.resume().join()
+        assertTrue(resumed is PairingAction.Expired)
+        assertEquals(2, rig.gateway.requests.size)
+    }
+
+    @Test
+    fun initialPayloadRetryAfterPastExpiryBecomesExpiredWithoutResending() {
+        val expiry = TEST_NOW + 3_000
+        val rig = rig(handler = { _, _, _ ->
+            RequestOutcome.Rejected(ApiReply.Rejected(429, "rate_limited", "request rate limit exceeded"), 10_000)
+        })
+        val limited = rig.coordinator.startPayload(payloadText(expiry), "wifi-1").join() as PairingAction.RateLimited
+        assertEquals(expiry, limited.retryAtMillis)
+        assertEquals(1, rig.gateway.requests.size)
+
+        rig.clock.now = expiry
+        val resumed = rig.coordinator.resume().join()
+        assertTrue(resumed is PairingAction.Expired)
+        assertTrue(rig.coordinator.requestInitial(limited.candidate.generation).join() is PairingAction.Expired)
+        assertEquals(1, rig.gateway.requests.size)
+    }
+
+    @Test
+    fun processResumeAfterLostApprovalPollDoesNotReplayThePoll() {
+        val rig = rig(handler = { _, request, _ ->
+            if ("pairing_session" !in request.body!!.fields) pendingReply()
+            else RequestOutcome.Unknown(TransportFailure.TIMEOUT)
+        })
+        val pending = rig.coordinator.startNonce(discovery()).join() as PairingAction.Pending
+        rig.clock.now += 2_000
+        assertTrue(rig.coordinator.poll(pending.candidate.generation).join() is PairingAction.Pending)
+        val storedBeforeRestart = repositoryState(rig).candidate!!
+        assertEquals(2, rig.gateway.requests.size)
+
+        val reopened = EncryptedStateRepository(rig.store, rig.cipher)
+        val noNetworkGateway = ScriptedPairingGateway { _, _, _ -> error("resume must not replay a lost poll") }
+        val resumedCoordinator = PairingCoordinator(
+            reopened,
+            PairingStateTransactions(reopened),
+            rig.clock,
+            noNetworkGateway,
+            executor = java.util.concurrent.Executor { it.run() },
+        )
+        val resumed = resumedCoordinator.resume().join() as PairingAction.Pending
+        assertEquals(storedBeforeRestart, resumed.candidate)
+        assertTrue(noNetworkGateway.requests.isEmpty())
     }
 
     @Test

@@ -1,10 +1,10 @@
 # Phase 03 implementation and validation evidence
 
-Date: 2026-09-25
+Date: 2026-09-26 (audit correction run)
 
 Code: this evidence is committed with the Phase 03 implementation.
 
-Protocol source: Decky fixture commit `4c35efb294e689a0451caecf3cb2e3fddcde7555`, protocol tree `1ebaf97d4645b145ccdd937a0d3a2663c84b7636`; pinned host behavior is `v0.5.16` (`9c213b31cdce36e67784355be21e2fc1b2b7570f`). See [`SOURCE.json`](../protocol/SOURCE.json).
+Protocol source: Decky fixture commit `804ebf1864f391358183dfcd1cacf61e289862e8`, protocol tree `4b661630f69bf7f2752862112f7f35288f571b18`; host runtime behavior remains `v0.5.16` (`9c213b31cdce36e67784355be21e2fc1b2b7570f`). The pin adds a deterministic host-generated QR payload fixture, bundled by Decky and validated against both host and Android codecs. See [`SOURCE.json`](../protocol/SOURCE.json).
 
 ## Implemented
 
@@ -13,7 +13,8 @@ Protocol source: Decky fixture commit `4c35efb294e689a0451caecf3cb2e3fddcde7555`
 - Added the pinned platform TLS path and the TLS 1.2, full-handshake-only pairing bootstrap that exports `tls-unique`; pin checks run before application request bytes.
 - Added the only unpinned path as a one-request, unauthenticated discovery probe. It checks the service/version/host identity and verifies the returned fingerprint against the leaf DER captured on that same connection.
 - Added Android adapters for per-network DNS, pre-connect socket binding, Wi-Fi/Ethernet path discovery, Android clocks, and unbound sockets. No mutation is connected to a UI control.
-- Added 140 named contract-fixture tests, strict parser/validation/deadline tests, and Android loopback fake-host transport tests. The protocol coverage verifier now confirms that each inventory row maps to a Kotlin test method that exists.
+- Added 140 named HTTP contract-fixture tests, strict parser/validation/deadline tests, Android loopback fake-host tests, and a JVM fake TLS server that runs the production transport. The JVM suite now feeds each pinned fixture request body through the Android request validator; the coverage verifier checks the separate QR payload fixture against its named parser test.
+- The client validator and persisted pairing model now expose exactly the verification-nonce and advanced-payload forms. The save-current validator requires `visible:true`; the TLS 1.3-only bootstrap failure reports that TLS 1.2 is required for `tls-unique`.
 
 ## Factcheck notes
 
@@ -46,6 +47,27 @@ passed
 
 The Android tests use the checked-in fake TLS host over loopback. They validate Android TLS/socket behavior, pin mismatch before request bytes, bootstrap channel binding, discovery isolation, lost/partial POST classification, cancellation, slow reads, rate limits, and the short status-poll deadline. They do not establish physical Wi-Fi/Ethernet behavior or replace the outstanding A0 hardware acceptance gates.
 
+## Audit correction verification — 2026-09-26
+
+```text
+python3 scripts/verify-protocol-hashes.py
+protocol bundle verified: 144 files
+
+python3 scripts/verify-protocol-coverage.py
+coverage inventory verified: 140 cases, 17 routes, 141 fixtures, 226 Kotlin tests
+
+GRADLE_USER_HOME=/tmp/gradle-hvo /home/hvo/.gradle/wrapper/dists/gradle-9.6.1-bin/4ticwg1pgcbps2hj28r8so764/gradle-9.6.1/bin/gradle --offline :core:test :app:testBaselineDebugUnitTest :app:compileBaselineDebugAndroidTestKotlin
+BUILD SUCCESSFUL
+core JVM suite: 234 tests, 0 failures, 0 errors, 0 skipped
+baseline app JVM suite: 20 tests, 0 failures, 0 errors, 0 skipped
+Android instrumentation sources compiled; runtime execution unavailable because adb is not installed
+
+git diff --check
+passed
+```
+
+The new JVM socket suite exercises the production transport against loopback TLS servers, including platform and bootstrap pin checks, independently decoded binding-header bytes, discovery isolation, TLS 1.3-only failure classification, and lost-POST outcomes. A0 hardware and Phase 02 runtime permission/TLS gates remain open.
+
 ## Gate boundary
 
-The Phase 03 implementation and listed automated exits passed on the stated contract revision. The plan file lives outside this repository and still lists its prerequisite as Phase 02 with all A0 gates closed. The Phase 00/A0 physical acceptance work and Phase 02 physical TLS/permission matrix were not performed by this code task, so this evidence does not mark those gates closed or claim physical Decky validation. No mutation UI was added.
+The Phase 03 code and JVM verification pass on the updated protocol pin. Phase 02's all-A0 precondition and physical TLS/permission matrix remain unverified, and this recheck could not execute Android instrumentation because `adb` is unavailable. This evidence therefore does not claim the upstream phase gate or physical Decky validation is closed. No mutation UI was added.

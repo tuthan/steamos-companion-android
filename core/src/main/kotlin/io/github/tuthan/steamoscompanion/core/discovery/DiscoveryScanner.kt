@@ -24,11 +24,17 @@ import java.util.concurrent.atomic.AtomicReference
 
 fun interface DiscoveryProbe {
     fun probe(target: TransportTarget, cancellation: CancellationSignal): DiscoveryProbeResult
+
+    fun probe(target: TransportTarget, cancellation: CancellationSignal, budgetMillis: Long): DiscoveryProbeResult =
+        probe(target, cancellation)
 }
 
 class PinnedDiscoveryProbe(private val transport: PinnedHttpTransport) : DiscoveryProbe {
     override fun probe(target: TransportTarget, cancellation: CancellationSignal): DiscoveryProbeResult =
-        transport.probeDiscovery(target, cancellation)
+        transport.probeDiscovery(target, cancellation, DiscoveryScanner.DEFAULT_PROBE_BUDGET_MS)
+
+    override fun probe(target: TransportTarget, cancellation: CancellationSignal, budgetMillis: Long): DiscoveryProbeResult =
+        transport.probeDiscovery(target, cancellation, budgetMillis)
 }
 
 data class DiscoveryScanResult(
@@ -154,7 +160,7 @@ class DiscoveryScanner(
         val signal = cancellation ?: CancellationSignal()
         val runGeneration = beginRun(signal)
         return try {
-            val result = probe.probe(TransportTarget(endpoint, path), signal)
+            val result = probe.probe(TransportTarget(endpoint, path), signal, MANUAL_PROBE_BUDGET_MS)
             if (runGeneration != generation.get()) return ManualProbeResult.Failed("cancelled")
             when (result) {
                 is DiscoveryProbeResult.Candidate -> ManualProbeResult.Candidate(result.value)
@@ -194,6 +200,8 @@ class DiscoveryScanner(
         const val MAX_CONCURRENT_PROBES = 16
         const val DEFAULT_SCAN_BUDGET_MS = 15_000L
         const val API36_LEGACY_SCAN_BUDGET_MS = 3_000L
+        const val DEFAULT_PROBE_BUDGET_MS = 750L
+        const val MANUAL_PROBE_BUDGET_MS = 5_000L
         const val MAX_SCAN_BUDGET_MS = DEFAULT_SCAN_BUDGET_MS
 
         /** Exposed for deterministic limit tests; output contains at most 1,024 unique non-self IPs. */
