@@ -16,6 +16,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.PinnedHttpTransport
 import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
+import io.github.tuthan.steamoscompanion.core.transport.ResponseTiming
 import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
 import java.io.IOException
 
@@ -30,17 +31,18 @@ class PinnedStatusGateway(
         val endpoint = HostEndpoint.parse(host.endpoint)
         val path = networks.activeLanPaths().firstOrNull() ?: throw IOException("No local network")
         val target = TransportTarget(endpoint, path)
-        fun fetch(route: ApiRoute): VersionedPayload? {
+        fun fetch(route: ApiRoute): Pair<VersionedPayload?, ResponseTiming?> {
             val request = ApiRequest(HttpMethod.GET, route.path, bearerToken = host.bearerToken)
             return when (val outcome = transport.execute(target, host.certificatePin, request, cancellation)) {
-                is RequestOutcome.Reply -> (outcome.response as? ApiReply.Versioned)?.payload
+                is RequestOutcome.Reply -> (outcome.response as? ApiReply.Versioned)?.payload to outcome.timing
                 is RequestOutcome.Rejected -> throw IOException("Host rejected ${route.path}: ${outcome.response.error}")
                 is RequestOutcome.NotSent -> throw IOException("${route.path}: ${outcome.failure}")
                 is RequestOutcome.Unknown -> throw IOException("${route.path}: ${outcome.failure}")
                 is RequestOutcome.PairingUnresolved -> throw IOException("Unexpected pairing response")
             }
         }
-        val status = fetch(ApiRoute.STATUS) as? VersionedPayload.Status
+        val (statusPayload, timing) = fetch(ApiRoute.STATUS)
+        val status = statusPayload as? VersionedPayload.Status
             ?: throw IOException("Invalid status response")
         if (status.hostId != host.hostId) throw IOException("Host identity changed")
         val saved = (repository.load() as? StateLoadResult.Ready)?.state?.activeHost
@@ -54,9 +56,9 @@ class PinnedStatusGateway(
             if (stored !is StateCommitResult.Saved) throw IOException("Active pairing changed during status read")
         }
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
-        val outputs = runCatching { fetch(ApiRoute.DISPLAY_OUTPUTS) as? VersionedPayload.DisplayOutputs }.getOrNull()
+        val outputs = runCatching { fetch(ApiRoute.DISPLAY_OUTPUTS).first as? VersionedPayload.DisplayOutputs }.getOrNull()
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
-        val order = runCatching { fetch(ApiRoute.DISPLAY_ORDER) as? VersionedPayload.DisplayOrder }.getOrNull()
-        return PairedStatusRead(status, outputs, order)
+        val order = runCatching { fetch(ApiRoute.DISPLAY_ORDER).first as? VersionedPayload.DisplayOrder }.getOrNull()
+        return PairedStatusRead(status, outputs, order, timing)
     }
 }

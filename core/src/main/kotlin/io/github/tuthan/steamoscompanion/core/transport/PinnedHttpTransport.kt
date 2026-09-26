@@ -80,7 +80,12 @@ enum class TransportFailure {
 
 sealed interface RequestOutcome {
     /** A 2xx response has been fully framed, parsed, and decoded. 202 still means accepted, not completed. */
-    data class Reply(val response: ApiReply, val status: Int, val retryAfterMillis: Long?) : RequestOutcome
+    data class Reply(
+        val response: ApiReply,
+        val status: Int,
+        val retryAfterMillis: Long?,
+        val timing: ResponseTiming? = null,
+    ) : RequestOutcome
     data class Rejected(val response: ApiReply.Rejected, val retryAfterMillis: Long?) : RequestOutcome
     data class NotSent(val failure: TransportFailure) : RequestOutcome
     /** A POST may have reached the host but no validated terminal response was obtained. */
@@ -88,6 +93,13 @@ sealed interface RequestOutcome {
     /** Initial pairing may have created a pending request, but its one-time session/id was not received. */
     data class PairingUnresolved(val failure: TransportFailure, val status: Int? = null) : RequestOutcome
 }
+
+/** Ephemeral timing evidence. Elapsed values must never be saved across a device reboot. */
+data class ResponseTiming(
+    val requestStartMonotonicNanos: Long,
+    val responseEndMonotonicNanos: Long,
+    val hostDateHeader: String?,
+)
 
 /**
  * One-request HTTPS transport for a host identified by a sha256:<lowercase DER digest> pin.
@@ -222,6 +234,7 @@ class PinnedHttpTransport(
         } catch (error: RequestCancelledException) {
             return RequestOutcome.NotSent(TransportFailure.CANCELLED)
         }
+        val requestStartMonotonicNanos = clock.monotonicNanos()
         val requestBytesMayHaveBeenSent = AtomicBoolean(false)
         var responseStatus: Int? = null
         var retryAfterMillis: Long? = null
@@ -248,6 +261,11 @@ class PinnedHttpTransport(
             } else {
                 pinnedPlatformRequest(raw, target.endpoint, pin, request, body, scope) { requestBytesMayHaveBeenSent.set(true) }
             }
+            val timing = ResponseTiming(
+                requestStartMonotonicNanos,
+                clock.monotonicNanos(),
+                response.headers.entries.firstOrNull { it.key.equals("date", ignoreCase = true) }?.value,
+            )
             responseStatus = response.status
             if (response.status == 429 || response.headers.keys.any { it.equals("retry-after", true) }) {
                 retryAfterMillis = RetryAfter.delayMillis(response.headers, clock.wallTimeMillis())
@@ -262,9 +280,9 @@ class PinnedHttpTransport(
                 is ApiReply.UnsupportedVersion -> if (request.method == HttpMethod.POST) {
                     ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), TransportFailure.PROTOCOL, responseStatus)
                 } else {
-                    RequestOutcome.Reply(decoded, response.status, retryAfterMillis)
+                    RequestOutcome.Reply(decoded, response.status, retryAfterMillis, timing)
                 }
-                is ApiReply.Versioned -> RequestOutcome.Reply(decoded, response.status, retryAfterMillis)
+                is ApiReply.Versioned -> RequestOutcome.Reply(decoded, response.status, retryAfterMillis, timing)
             }
         } catch (_: RequestCancelledException) {
             val failure = if (permissionRevoked.get()) TransportFailure.PERMISSION else TransportFailure.CANCELLED

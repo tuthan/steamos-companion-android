@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.core.client
 
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
+import io.github.tuthan.steamoscompanion.core.transport.ResponseTiming
 import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -13,6 +14,7 @@ data class PairedStatusRead(
     val status: VersionedPayload.Status,
     val outputs: VersionedPayload.DisplayOutputs?,
     val order: VersionedPayload.DisplayOrder?,
+    val timing: ResponseTiming? = null,
 )
 
 fun interface PairedStatusGateway {
