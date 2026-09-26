@@ -66,13 +66,17 @@ class CameraQrScanner(
             @Suppress("MissingPermission") // The permission is checked immediately above and rechecked by the platform.
             cameras.openCamera(id, object : CameraDevice.StateCallback() {
                 override fun onOpened(device: CameraDevice) {
-                    if (closed) { device.close(); return }
-                    camera = device
+                    val accepted = synchronized(this@CameraQrScanner) {
+                        if (closed) false else { camera = device; true }
+                    }
+                    if (!accepted) { device.close(); return }
                     try {
                         device.createCaptureSession(listOf(preview, images.surface), object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(configured: CameraCaptureSession) {
-                                if (closed) { configured.close(); return }
-                                session = configured
+                                val accepted = synchronized(this@CameraQrScanner) {
+                                    if (closed) false else { session = configured; true }
+                                }
+                                if (!accepted) { configured.close(); return }
                                 try {
                                     val request = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                                         addTarget(preview)
@@ -123,7 +127,12 @@ class CameraQrScanner(
             } catch (_: IllegalArgumentException) { null }
             bytes.fill(0)
             if (payload != null && delivered.compareAndSet(false, true)) {
-                main.post { close(); onPayload(payload) }
+                main.post {
+                    if (!closed) {
+                        close()
+                        onPayload(payload)
+                    }
+                }
             }
         }
     }
