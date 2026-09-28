@@ -17,6 +17,8 @@ data class PairedStatusRead(
     val order: VersionedPayload.DisplayOrder?,
     val timing: ResponseTiming? = null,
     val outputsTiming: ResponseTiming? = null,
+    /** A display read can fail while the authenticated status read still succeeds. */
+    val outputsError: String? = null,
 )
 
 /** Ephemeral provenance for a pinned status observation, without retaining the bearer in UI state. */

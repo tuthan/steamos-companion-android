@@ -61,7 +61,11 @@ class PinnedStatusGateway(
         fun fetch(route: ApiRoute): Pair<VersionedPayload?, ResponseTiming?> {
             val request = ApiRequest(HttpMethod.GET, route.path, bearerToken = host.bearerToken)
             return when (val outcome = transport.execute(target, host.certificatePin, request, cancellation)) {
-                is RequestOutcome.Reply -> (outcome.response as? ApiReply.Versioned)?.payload to outcome.timing
+                is RequestOutcome.Reply -> {
+                    val payload = (outcome.response as? ApiReply.Versioned)?.payload
+                        ?: throw IOException("Host protocol version is unsupported for ${route.path}")
+                    payload to outcome.timing
+                }
                 is RequestOutcome.Rejected -> throw IOException("Host rejected ${route.path}: ${outcome.response.error}")
                 is RequestOutcome.NotSent -> throw failure(route, outcome.failure)
                 is RequestOutcome.Unknown -> throw failure(route, outcome.failure)
@@ -84,10 +88,15 @@ class PinnedStatusGateway(
             if (stored !is StateCommitResult.Saved) throw IllegalStateException("Active pairing changed during status read")
         }
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
+        var outputsError: String? = null
         val (outputsPayload, outputsTiming) = try { fetch(ApiRoute.DISPLAY_OUTPUTS) }
         catch (error: PinnedCertificateChanged) { throw error }
-        catch (_: IOException) { null to null }
+        catch (error: IOException) {
+            outputsError = error.message ?: "Display output request failed"
+            null to null
+        }
         val outputs = outputsPayload as? VersionedPayload.DisplayOutputs
+        if (outputsPayload != null && outputs == null) outputsError = "Unexpected display output response"
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
         if (outputs != null && outputs.available && !outputs.legacyShape) {
             val stored = repository.recordRecoveryProfiles(host, outputs.profiles)
@@ -97,7 +106,7 @@ class PinnedStatusGateway(
         val order = try { fetch(ApiRoute.DISPLAY_ORDER).first as? VersionedPayload.DisplayOrder }
         catch (error: PinnedCertificateChanged) { throw error }
         catch (_: IOException) { null }
-        return PairedStatusRead(status, outputs, order, timing, outputsTiming)
+        return PairedStatusRead(status, outputs, order, timing, outputsTiming, outputsError)
     }
 
     private fun failure(route: ApiRoute, reason: TransportFailure): IOException =

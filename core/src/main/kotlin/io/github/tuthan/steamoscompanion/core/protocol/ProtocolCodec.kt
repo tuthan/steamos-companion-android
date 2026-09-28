@@ -236,8 +236,8 @@ object ProtocolCodec {
         val outputs = outputsValue.mapIndexed { index, value ->
             val output = value.asObject("outputs[$index]")
             val id = bounded(output["id"].asString("output.id"), "output.id", 128)
-            val name = output["name"].nullableString("output.name", 256)
-            output["description"].nullableString("output.description", 256)
+            val name = output["name"].nullableDisplayLabel("output.name", 256)
+            output["description"].nullableDisplayLabel("output.description", 256)
             val isInternal = output["is_internal"].nullableBoolean("output.is_internal")
             val currentMode = output["current_mode_id"].nullableString("output.current_mode_id", 128)
             val outputGeneration = nonnegativeLong(output["generation"] ?: throw JsonFormatException("Output generation is missing"), "output.generation")
@@ -328,6 +328,12 @@ object ProtocolCodec {
     private fun JsonValue?.nullableString(field: String, maxLength: Int): String? = when (this) {
         null, JsonValue.NullValue -> null
         else -> bounded(asString(field), field, maxLength)
+    }
+
+    /** The host permits empty display labels; use the stable output ID when one is blank. */
+    private fun JsonValue?.nullableDisplayLabel(field: String, maxLength: Int): String? = when (this) {
+        null, JsonValue.NullValue -> null
+        else -> asString(field).let { if (it.isEmpty()) null else bounded(it, field, maxLength) }
     }
 
     private fun JsonValue?.nullableBoolean(field: String): Boolean? = when (this) {

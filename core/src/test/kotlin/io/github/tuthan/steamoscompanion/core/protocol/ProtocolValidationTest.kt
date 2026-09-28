@@ -8,6 +8,26 @@ import org.junit.Assert.assertThrows
 
 class ProtocolValidationTest {
     @Test
+    fun displayOutputAcceptsEmptyLabelsPermittedByHostSchema() {
+        val fixture = BoundedJson.parseObject(
+            ProtocolFixtureAssertions.readResource("fixtures/contract/display-outputs/available.json"))
+        val body = fixture["response"].asObject("response")["body"].asObject("body")
+        val output = body["outputs"].asArray("outputs").single().asObject("output")
+        val unnamed = JsonValue.ObjectValue(output.fields +
+            ("name" to JsonValue.StringValue("")) +
+            ("description" to JsonValue.StringValue("")))
+        val altered = JsonValue.ObjectValue(body.fields +
+            ("outputs" to JsonValue.ArrayValue(listOf(unnamed))))
+
+        val decoded = ProtocolCodec.decodeResponse(ApiRoute.DISPLAY_OUTPUTS,
+            HttpResponse(200, emptyMap(), BoundedJson.encode(altered))) as ApiReply.Versioned
+        val inventory = decoded.payload as VersionedPayload.DisplayOutputs
+        assertTrue(inventory.available)
+        assertEquals(null, inventory.outputs.single().name)
+        assertEquals("1", inventory.outputs.single().id)
+    }
+
+    @Test
     fun requestBodiesFromEveryPinnedFixtureAreCheckedByTheAndroidValidator() {
         ProtocolFixtureAssertions.assertEveryFixtureRequestAgainstAndroidValidator()
     }

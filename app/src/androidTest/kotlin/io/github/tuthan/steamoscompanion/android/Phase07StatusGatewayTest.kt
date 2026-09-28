@@ -163,6 +163,29 @@ class Phase07StatusGatewayTest {
         }
     }
 
+    @Test fun displayReadFailureKeepsStatusAndReportsTheDisplayProblem() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        val repository = AndroidAtomicStateStore.createRepository(context)
+        repository.reset()
+        FakeHost(assets).use { host ->
+            try {
+                host.default("GET", "/v1/status", FakeHost.Reply.Body(200, "fixtures/status-sunshine-running.json"))
+                host.default("GET", "/v1/display/outputs",
+                    FakeHost.Reply.Fixture("fixtures/contract/display-outputs/unauthorized.json"))
+                val paired = activeHost(host)
+                assertTrue(repository.transact { it.copy(activeHost = paired) } is StateCommitResult.Saved)
+
+                val read = gateway(host, repository).read(paired, CancellationSignal())
+
+                assertEquals("fixture-host", read.status.hostId)
+                assertEquals(null, read.outputs)
+                assertEquals("Host rejected /v1/display/outputs: unauthorized", read.outputsError)
+                host.assertHealthy()
+            } finally { repository.reset() }
+        }
+    }
+
     @Test fun changedCertificateRequiresRepairWithoutSendingStatusBytes() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = InstrumentationRegistry.getInstrumentation().context.assets

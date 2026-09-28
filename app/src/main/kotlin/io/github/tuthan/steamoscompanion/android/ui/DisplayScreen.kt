@@ -34,6 +34,7 @@ import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.client.StatusObservationSource
 import io.github.tuthan.steamoscompanion.core.client.StatusPollState
 import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 
 @Composable
@@ -53,9 +54,10 @@ fun DisplayScreen(
 ) {
     val palette = LocalCompanionPalette.current
     val pairingKey = StatusObservationSource.from(host)
-    val inventory = status.lastRead?.outputs?.takeIf {
-        status.source == StatusObservationSource.from(host) && it.available && !it.legacyShape
-    }
+    val read = status.lastRead?.takeIf { status.source == StatusObservationSource.from(host) }
+    val reportedOutputs = read?.outputs
+    val inventory = reportedOutputs?.takeIf { it.available }
+    val legacyInventory = inventory?.legacyShape == true
     var previousInventory by remember(pairingKey) { mutableStateOf<VersionedPayload.DisplayOutputs?>(null) }
     var selection by remember(pairingKey) { mutableStateOf<DisplaySelection?>(null) }
     LaunchedEffect(inventory) {
@@ -111,11 +113,24 @@ fun DisplayScreen(
         icon = R.drawable.ic_replay,
         onClick = { selectedProfileId?.let(onRestore) })
     if (inventory == null) {
-        if (status.unreachable) StatusLine("Display is unreachable", StatusTone.WARNING, glyph = StatusGlyph.BLOCKED,
-            detail = "Saved recovery may still be available")
-        else StatusLine("Checking display outputs…", StatusTone.PENDING)
+        when {
+            status.unreachable -> StatusLine("Display is unreachable", StatusTone.WARNING, glyph = StatusGlyph.BLOCKED,
+                detail = "Saved recovery may still be available")
+            reportedOutputs != null -> StatusLine("Display outputs unavailable", StatusTone.WARNING,
+                detail = (reportedOutputs.body["reason"] as? JsonValue.StringValue)?.value
+                    ?: "The host did not report an available display")
+            read?.outputsError != null -> StatusLine("Couldn't load display outputs", StatusTone.WARNING,
+                detail = read.outputsError)
+            else -> StatusLine("Checking display outputs…", StatusTone.PENDING)
+        }
     } else {
+        if (legacyInventory) StatusLine("Display modes are read-only with this host version", StatusTone.WARNING,
+            detail = "Update the host plugin to preview or save a recovery mode")
         Kicker("Outputs")
+        if (inventory.outputs.size == 1) {
+            val output = inventory.outputs.single()
+            StatusLine(output.name ?: output.id, StatusTone.UNKNOWN, detail = "Output ${output.id}")
+        }
         if (inventory.outputs.size > 1) inventory.outputs.forEach { output ->
             ActionRow(output.name ?: output.id, secondary = "Output ${output.id}",
                 selected = output.id == selectedOutput?.id,
@@ -130,7 +145,7 @@ fun DisplayScreen(
                     selected = mode.id == selection?.modeId,
                     onClick = { selection = selection?.copy(modeId = mode.id) })
             }
-            val canPreview = !busy && !status.unreachable && !status.stale &&
+            val canPreview = !legacyInventory && !busy && !status.unreachable && !status.stale &&
                 preview == PreviewPresentation.None && selection?.modeId != null &&
                 selection?.modeId != selectedOutput.currentModeId && "display.control" in host.grantedScopes
             if (preview == PreviewPresentation.None) {
@@ -139,7 +154,7 @@ fun DisplayScreen(
             }
             val currentConfirmation = SaveCurrentConfirmation.forOutput(host, selectedOutput)
             ActionRow(stringResource(R.string.ui_save_current_recovery_mode),
-                enabled = !busy && !status.unreachable && !status.stale &&
+                enabled = !legacyInventory && !busy && !status.unreachable && !status.stale &&
                     currentConfirmation != null && preview == PreviewPresentation.None,
                 reason = if (currentConfirmation == null) "Current mode is unavailable" else "Finish the current preview first",
                 icon = R.drawable.ic_download,
