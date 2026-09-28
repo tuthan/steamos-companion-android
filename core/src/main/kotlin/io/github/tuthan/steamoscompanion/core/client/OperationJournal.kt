@@ -229,7 +229,7 @@ class OperationJournal(
             ApiRoute.DISPLAY_CONFIRM.path ->
                 (request.body?.fields?.get("preview_id") as? JsonValue.StringValue)?.value == entry.operationId
             ApiRoute.DISPLAY_RESTORE.path ->
-                (request.body?.fields?.get("source") as? JsonValue.StringValue)?.value == "preview"
+                (request.body?.fields?.get("source") as? JsonValue.StringValue)?.value in setOf("preview", "verified")
             else -> false
         }
     }

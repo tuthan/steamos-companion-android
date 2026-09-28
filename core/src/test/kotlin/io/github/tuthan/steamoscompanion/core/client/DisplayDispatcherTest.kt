@@ -106,6 +106,37 @@ class DisplayDispatcherTest {
             dispatcher.restoreSaved(host, stale, "wrong-profile", noReply))
     }
 
+    @Test fun verifiedProfileCanRecoverOwnedActivePreviewButNotAnotherClientsPreview() {
+        repository.transact { it.copy(activeHost = host) }
+        val previewInventory = outputs("with-active-preview")
+        val preview = requireNotNull(previewInventory.preview)
+        val profile = outputs("with-profile").profiles.single()
+        val observed = observation(previewInventory.copy(profiles = listOf(profile)))
+
+        assertEquals(DisplayDispatchResult.Blocked(DisplayBlock.PREVIEW_NOT_OWNED),
+            dispatcher.restoreSaved(host, observed, profile.id, noReply))
+
+        val request = ApiRequest(HttpMethod.POST, ApiRoute.DISPLAY_PREVIEW.path,
+            jsonObject("request_id" to JsonValue.StringValue("preview-for-verified-restore"),
+                "output_id" to JsonValue.StringValue("1"), "mode_id" to JsonValue.StringValue("2"),
+                "generation" to JsonValue.NumberValue("4")), host.bearerToken)
+        val entry = JournalEntry.create(1, host, request, BoundedJson.encode(requireNotNull(request.body)), 100)
+            .copy(phase = JournalPhase.ACCEPTED, operationId = preview.id)
+        repository.transact { it.copy(journal = listOf(entry)) }
+
+        var sends = 0
+        val result = dispatcher.restoreSaved(host, observed, profile.id, JournalMutationSender { _, sent, _ ->
+            sends++
+            assertEquals(ApiRoute.DISPLAY_RESTORE.path, sent.path)
+            val body = requireNotNull(sent.body)
+            assertEquals("verified", (body["source"] as JsonValue.StringValue).value)
+            assertEquals(profile.id, (body["profile_id"] as JsonValue.StringValue).value)
+            RequestOutcome.NotSent(TransportFailure.IO)
+        })
+        assertTrue(result is DisplayDispatchResult.Dispatched)
+        assertEquals(1, sends)
+    }
+
     @Test fun keepNeedsOwnedPreviewFreshHostDeadlineAndExplicitPictureCheck() {
         repository.transact { it.copy(activeHost = host) }
         val preview = requireNotNull(outputs("with-active-preview").preview)

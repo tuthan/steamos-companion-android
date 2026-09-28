@@ -31,7 +31,6 @@ object ActionAvailability {
             !context.hasScope(DISPLAY_SCOPE) -> blocked(ActionBlock.MISSING_DISPLAY_PERMISSION)
             !context.savedRecoveryProfileAvailable -> blocked(ActionBlock.NO_SAVED_PROFILE)
             context.previewOwnership == PreviewOwnership.OTHER_CLIENT -> blocked(ActionBlock.PREVIEW_OWNED_ELSEWHERE)
-            context.previewOwnership == PreviewOwnership.UNKNOWN -> blocked(ActionBlock.PREVIEW_STATE_UNKNOWN)
             else -> mutationLane(context)
         }
         UiAction.PREVIEW_DISPLAY_MODE -> when {

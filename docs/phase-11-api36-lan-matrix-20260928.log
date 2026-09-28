@@ -1,0 +1,21 @@
+device: google/sdk_gphone64_x86_64/emu64xa:16/BE2A.250530.026.F3/13894323:userdebug/dev-keys
+Disabled change 365139289 for io.github.tuthan.steamoscompanion.
+== RESTRICT_LOCAL_NETWORK disabled, expectRestricted=false
+
+io.github.tuthan.steamoscompanion.android.LanMatrixTest:.
+
+Time: 0.438
+
+OK (1 test)
+09-28 21:01:25.643  1897  2414 I LanMatrix: api=36 expectRestricted=false outcome=connected
+PASS
+Enabled change 365139289 for io.github.tuthan.steamoscompanion.
+== RESTRICT_LOCAL_NETWORK enabled, expectRestricted=true
+
+io.github.tuthan.steamoscompanion.android.LanMatrixTest:.
+
+Time: 3.232
+
+OK (1 test)
+09-28 21:01:56.809  1779  2262 I LanMatrix: api=36 expectRestricted=true outcome=failed: SocketTimeoutException: failed to connect to /10.0.2.2 (port 47989) from /10.0.2.15 (port 45872) after 3000ms
+PASS

@@ -30,6 +30,12 @@ class ActionAvailabilityTest {
             assertTrue("$freshness should not hide blind recovery", result.enabled)
         }
 
+        assertTrue(ActionAvailability.forAction(
+            UiAction.RESTORE_SAVED_DISPLAY,
+            readyContext().copy(statusFreshness = StatusFreshness.NEVER_CHECKED,
+                previewOwnership = PreviewOwnership.UNKNOWN),
+        ).enabled)
+
         assertEquals(
             ActionBlock.NO_SAVED_PROFILE,
             ActionAvailability.forAction(

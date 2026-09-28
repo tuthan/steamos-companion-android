@@ -1,0 +1,37 @@
+device: google/sdk_gphone64_x86_64/emu64xa:17/CE2A.260420.019/15611780:userdebug/dev-keys
+2d57363905624e6990b3d6d953defb5f5c860fff8f9eafdf12bd94679b417176  /home/hvo/Projects/steamos-companion-android/app/build/outputs/apk/target37/debug/app-target37-debug.apk
+01ebd090d9b5942a8481fdcf2ea5b95144097bcee34c94f7a567e5d0d0d6cd24  /home/hvo/Projects/steamos-companion-android/app/build/outputs/apk/androidTest/target37/debug/app-target37-debug-androidTest.apk
+== seed_preview
+INSTRUMENTATION_STATUS: pid=2603
+INSTRUMENTATION_STATUS: result=passed
+INSTRUMENTATION_STATUS: stage=seed_preview
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: shortMsg=Process crashed.
+INSTRUMENTATION_CODE: 0
+PASS seed_preview pid=2603
+== approve_candidate
+INSTRUMENTATION_STATUS: pid=3323
+INSTRUMENTATION_STATUS: result=passed
+INSTRUMENTATION_STATUS: stage=approve_candidate
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: shortMsg=Process crashed.
+INSTRUMENTATION_CODE: 0
+PASS approve_candidate pid=3323
+== swap_candidate
+INSTRUMENTATION_STATUS: pid=3863
+INSTRUMENTATION_STATUS: result=passed
+INSTRUMENTATION_STATUS: stage=swap_candidate
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: shortMsg=Process crashed.
+INSTRUMENTATION_CODE: 0
+PASS swap_candidate pid=3863
+== verify_swap
+INSTRUMENTATION_STATUS: pid=4174
+INSTRUMENTATION_STATUS: result=passed
+INSTRUMENTATION_STATUS: stage=verify_swap
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: pid=4174
+INSTRUMENTATION_RESULT: result=passed
+INSTRUMENTATION_RESULT: stage=verify_swap
+INSTRUMENTATION_CODE: -1
+PASS verify_swap pid=4174

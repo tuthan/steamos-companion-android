@@ -74,11 +74,11 @@ android {
         unitTests.isIncludeAndroidResources = true
         managedDevices {
             localDevices {
-                create("api27") { device = "Pixel 2"; apiLevel = 27; systemImageSource = "aosp"; require64Bit = true }
-                create("api28") { device = "Pixel 2"; apiLevel = 28; systemImageSource = "google"; require64Bit = true }
-                create("api35") { device = "Pixel 6"; apiLevel = 35; systemImageSource = "google" }
-                create("api36") { device = "Pixel 6"; apiLevel = 36; systemImageSource = "google" }
-                create("api37") { device = "Pixel 6"; apiLevel = 37; systemImageSource = "google" }
+                create("api27") { device = "Pixel 2"; apiLevel = 27; systemImageSource = "aosp"; require64Bit = true; testedAbi = "x86_64" }
+                create("api28") { device = "Pixel 2"; apiLevel = 28; systemImageSource = "google"; require64Bit = true; testedAbi = "x86_64" }
+                create("api35") { device = "Pixel 6"; apiLevel = 35; systemImageSource = "google"; testedAbi = "x86_64" }
+                create("api36") { device = "Pixel 6"; apiLevel = 36; systemImageSource = "google"; testedAbi = "x86_64" }
+                create("api37") { device = "Pixel 6"; apiLevel = 37; systemImageSource = "google"; testedAbi = "x86_64" }
             }
             groups {
                 create("phase01") {

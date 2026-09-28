@@ -9,5 +9,8 @@ avd_ensure "$name" "$image"
 avd_boot "$name" 5580
 trap avd_stop EXIT
 echo "device: $(avd_fingerprint)"
+# This dedicated smoke AVD may retain a debug APK signed by a prior local key.
+"$ADB" -s "$SERIAL" uninstall io.github.tuthan.steamoscompanion.test >/dev/null 2>&1 || true
+"$ADB" -s "$SERIAL" uninstall io.github.tuthan.steamoscompanion >/dev/null 2>&1 || true
 ANDROID_SERIAL="$SERIAL" "$ROOT/gradlew" -p "$ROOT" --no-daemon :app:connectedBaselineDebugAndroidTest \
   | tee "$LOG_DIR/avd-smoke-api$api.log"

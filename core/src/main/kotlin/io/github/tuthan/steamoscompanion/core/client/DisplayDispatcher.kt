@@ -113,8 +113,10 @@ class DisplayDispatcher(
         val checked = context(host, observation, requireFresh = false)
         val context = checked.context ?: return blocked(requireNotNull(checked.block))
         val inventory = context.inventory
-        if (inventory?.preview != null) return blocked(DisplayBlock.PREVIEW_ACTIVE)
-        if (context.hasUnresolved()) return blocked(DisplayBlock.OPERATION_UNRESOLVED)
+        if (inventory?.preview != null && !context.ownsPreview()) return blocked(DisplayBlock.PREVIEW_NOT_OWNED)
+        if (context.hasUnresolved(exceptOwnedPreview = inventory?.preview != null)) {
+            return blocked(DisplayBlock.OPERATION_UNRESOLVED)
+        }
         val profiles = if (inventory != null && !observation.unreachable && !observation.stale) {
             inventory.profiles
         } else context.host.cachedRecoveryProfiles ?: inventory?.profiles

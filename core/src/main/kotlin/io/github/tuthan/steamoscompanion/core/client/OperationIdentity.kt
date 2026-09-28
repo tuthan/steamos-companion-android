@@ -29,6 +29,12 @@ object OperationLanePresentation {
     fun hasUnresolved(host: ActiveHost, state: PersistentState): Boolean =
         state.journal.any { it.phase.unresolved && it.mayConflictWith(host) }
 
+    fun hasUnresolvedOtherThanPreview(host: ActiveHost, state: PersistentState, previewId: String): Boolean =
+        state.journal.any { entry ->
+            entry.phase.unresolved && entry.mayConflictWith(host) &&
+                !(entry.path == ApiRoute.DISPLAY_PREVIEW.path && entry.operationId == previewId && entry.belongsTo(host))
+        }
+
     fun ownsPreview(host: ActiveHost, state: PersistentState, previewId: String): Boolean =
         state.journal.any { it.path == ApiRoute.DISPLAY_PREVIEW.path && it.operationId == previewId && it.belongsTo(host) }
 }

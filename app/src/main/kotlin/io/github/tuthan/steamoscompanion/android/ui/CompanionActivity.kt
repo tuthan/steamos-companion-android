@@ -122,7 +122,7 @@ class CompanionActivity : ComponentActivity() {
         pairedSession = host?.let(::createPairedSession)
         if (loaded?.state?.candidate != null) pairingFlow.resume()
         setContent {
-            CompanionTheme(darkTheme = true) {
+            CompanionTheme {
                 val route = navigation.route
                 LaunchedEffect(route.destination) {
                     if (route.destination == UiDestination.PAIRING || route.destination == UiDestination.SCANNER) {
@@ -420,7 +420,11 @@ private fun actionContext(host: ActiveHost, state: PersistentState?, status: Sta
         wakeTargetConfigured = host.wakeTarget.available,
         savedRecoveryProfileAvailable = host.cachedRecoveryProfiles?.isNotEmpty() == true,
         previewOwnership = owner,
-        anotherOperationInProgress = state?.let { OperationLanePresentation.hasUnresolved(host, it) } == true,
+        anotherOperationInProgress = state?.let {
+            if (owner == PreviewOwnership.OWNED_HERE && preview != null) {
+                OperationLanePresentation.hasUnresolvedOtherThanPreview(host, it, preview.id)
+            } else OperationLanePresentation.hasUnresolved(host, it)
+        } == true,
         hasUnresolvedOperation = state?.let { OperationLanePresentation.hasUnresolved(host, it) } == true,
         sunshineState = (read?.status?.sunshineState as? WireValue.Known<SunshineState>)?.value,
     )
@@ -510,12 +514,10 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
     val profile = host.cachedRecoveryProfiles?.firstOrNull()
     ActionRow(stringResource(R.string.ui_restore_saved_display),
         secondary = profile?.mode?.let { "${it.width} × ${it.height} · ${it.refreshHz ?: "?"} Hz" },
-        enabled = profile != null && !busy && recovery == PreviewPresentation.None,
+        enabled = profile != null && !busy && (recovery == PreviewPresentation.None ||
+            recovery is PreviewPresentation.Active && recovery.revertAvailable),
         reason = if (profile == null) "No recovery mode saved" else "Resolve the preview or operation first",
         icon = R.drawable.ic_replay, onClick = { profile?.id?.let(onRestore) })
-    ActionRow("Check device status", icon = R.drawable.ic_radar, onClick = onCheckStatus)
-    ActionRow(stringResource(R.string.ui_display_settings), icon = R.drawable.ic_list, navigates = true,
-        onClick = { onNavigate(UiDestination.DISPLAY) })
     val recoveryBlockReason = when (recovery) {
         is PreviewPresentation.Active -> "Waiting for this preview to be kept or reverted"
         is PreviewPresentation.Pending -> "Check the unconfirmed display result first"
@@ -525,6 +527,9 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
         enabled = host.wakeTarget.available,
         reason = if (host.wakeTarget.available) null else stringResource(R.string.ui_wake_not_configured),
         onClick = { onNavigate(UiDestination.WAKE) })
+    ActionRow("Check device status", icon = R.drawable.ic_radar, onClick = onCheckStatus)
+    ActionRow(stringResource(R.string.ui_display_settings), icon = R.drawable.ic_list, navigates = true,
+        onClick = { onNavigate(UiDestination.DISPLAY) })
     ActionRow(stringResource(R.string.ui_power_options), icon = R.drawable.ic_play, navigates = true,
         secondary = "Suspend, restart, shut down",
         enabled = recovery == PreviewPresentation.None,

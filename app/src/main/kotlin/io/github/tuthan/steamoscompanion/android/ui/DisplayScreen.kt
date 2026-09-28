@@ -96,6 +96,20 @@ fun DisplayScreen(
             StatusTone.WARNING, glyph = StatusGlyph.QUESTION, detail = "Check the original operation")
         PreviewPresentation.None -> Unit
     }
+    Kicker("Saved recovery")
+    if (profileInventory.isEmpty()) StatusLine(stringResource(R.string.ui_no_recovery_mode_saved), StatusTone.WARNING,
+        detail = stringResource(R.string.ui_no_recovery_mode_saved_help))
+    else profileInventory.forEach { profile ->
+        ActionRow(modeLabel(profile.mode), secondary = "Output ${profile.outputId}",
+            selected = profile.id == selectedProfileId,
+            onClick = { selectedProfileId = profile.id })
+    }
+    ActionRow(stringResource(R.string.ui_restore_saved_display),
+        enabled = !busy && selectedProfileId != null && (preview == PreviewPresentation.None ||
+            preview is PreviewPresentation.Active && preview.revertAvailable),
+        reason = if (selectedProfileId == null) stringResource(R.string.ui_no_recovery_mode_saved) else "Resolve the preview or operation first",
+        icon = R.drawable.ic_replay,
+        onClick = { selectedProfileId?.let(onRestore) })
     if (inventory == null) {
         if (status.unreachable) StatusLine("Display is unreachable", StatusTone.WARNING, glyph = StatusGlyph.BLOCKED,
             detail = "Saved recovery may still be available")
@@ -132,20 +146,6 @@ fun DisplayScreen(
                 onClick = { saveConfirmation = currentConfirmation })
         }
     }
-    Kicker("Saved recovery")
-    if (profileInventory.isEmpty()) StatusLine(stringResource(R.string.ui_no_recovery_mode_saved), StatusTone.WARNING,
-        detail = stringResource(R.string.ui_no_recovery_mode_saved_help))
-    else profileInventory.forEach { profile ->
-        ActionRow(modeLabel(profile.mode), secondary = "Output ${profile.outputId}",
-            selected = profile.id == selectedProfileId,
-            onClick = { selectedProfileId = profile.id })
-    }
-    ActionRow(stringResource(R.string.ui_restore_saved_display),
-        enabled = !busy && selectedProfileId != null && preview !is PreviewPresentation.Pending &&
-            preview !is PreviewPresentation.Active,
-        reason = if (selectedProfileId == null) stringResource(R.string.ui_no_recovery_mode_saved) else "Resolve the preview or operation first",
-        icon = R.drawable.ic_replay,
-        onClick = { selectedProfileId?.let(onRestore) })
     state?.let { persisted ->
         DisplayOperationPresentation.latest(host, persisted, status, nowMonotonicNanos)?.let { card ->
             Kicker("Latest display operation")

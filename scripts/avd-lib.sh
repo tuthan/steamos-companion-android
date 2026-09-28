@@ -24,7 +24,7 @@ avd_boot() { # name port -> sets SERIAL
 }
 
 avd_wait_boot() {
-  "$ADB" -s "$SERIAL" wait-for-device
+  timeout 60 "$ADB" -s "$SERIAL" wait-for-device
   local deadline=$((SECONDS + 300))
   until [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; do
     [ "$SECONDS" -lt "$deadline" ] || { echo "boot timed out on $SERIAL" >&2; return 1; }
