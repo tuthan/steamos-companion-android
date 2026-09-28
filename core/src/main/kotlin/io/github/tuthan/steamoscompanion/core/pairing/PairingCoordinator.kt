@@ -80,6 +80,13 @@ sealed interface PairingAction {
     data class Retryable(val candidate: PairingCandidate, val reason: String) : PairingAction
     data class RateLimited(val candidate: PairingCandidate, val retryAtMillis: Long) : PairingAction
     data class Approved(val activeHost: ActiveHost) : PairingAction
+    /** A second host is approved but remains staged until the owner confirms the replacement. */
+    data class ReplacementReady(
+        val candidateGeneration: Long,
+        val currentHostId: String,
+        val proposedHostId: String,
+        val proposedEndpoint: String,
+    ) : PairingAction
     data class Rejected(val candidate: PairingCandidate, val error: String, val message: String) : PairingAction
     data class Expired(val candidate: PairingCandidate) : PairingAction
     data class IdentityChanged(val expectedHostId: String?, val actualHostId: String?) : PairingAction
@@ -544,11 +551,26 @@ class PairingCoordinator(
         return finalizeApproved(candidate.generation)
     }
 
-    private fun finalizeApproved(generation: Long): PairingAction = when (val result = transactions.acceptApprovedCandidate(generation)) {
+    private fun finalizeApproved(generation: Long): PairingAction {
+        val state = when (val loaded = repository.load()) {
+            is StateLoadResult.Ready -> loaded.state
+            is StateLoadResult.Unavailable -> return PairingAction.StateUnavailable(loaded.reason)
+            is StateLoadResult.Failed -> return PairingAction.PersistenceFailed(loaded.reason)
+            StateLoadResult.Empty -> return PairingAction.StaleGeneration
+        }
+        val candidate = state.candidate ?: return PairingAction.StaleGeneration
+        if (state.pairingGeneration != generation || candidate.generation != generation ||
+            candidate.phase != CandidatePhase.APPROVED_STAGED || candidate.stagedCredential == null || candidate.hostId == null
+        ) return PairingAction.StaleGeneration
+        state.activeHost?.let { current ->
+            return PairingAction.ReplacementReady(generation, current.hostId, candidate.hostId, candidate.endpoint)
+        }
+        return when (val result = transactions.acceptApprovedCandidateFor(generation, null)) {
         is StateCommitResult.Saved -> PairingAction.Approved(requireNotNull(result.state.activeHost))
         is StateCommitResult.Failed, is StateCommitResult.Unavailable -> PairingAction.CredentialCouldNotBeSaved(currentCandidate(generation))
         is StateCommitResult.Rejected -> if (result.code.name == "STALE_GENERATION") PairingAction.StaleGeneration
             else PairingAction.NeedsAttention(currentCandidate(generation) ?: return PairingAction.StaleGeneration, "Approved pairing is saved but could not be finalized")
+        }
     }
 
     private fun initialRejection(candidate: PairingCandidate, error: String, message: String, retryAfterMillis: Long?): PairingAction {
@@ -644,13 +666,13 @@ class PairingCoordinator(
     private fun cancelBlocking(generation: Long, cancellation: CancellationSignal): PairingAction {
         val candidate = currentCandidate(generation) ?: return PairingAction.StaleGeneration
         if (candidate.phase == CandidatePhase.APPROVED_STAGED) {
-            return PairingAction.NeedsAttention(candidate, "The approved credential is already saved; finish pairing before cancelling")
+            return PairingAction.NeedsAttention(candidate, "The approved credential is saved; confirm replacement or discard it with host cleanup")
         }
         val result = transactions.cancelCandidate(generation)
         if (result !is StateCommitResult.Saved) {
             val latest = currentCandidate(generation)
             if (latest?.phase == CandidatePhase.APPROVED_STAGED) {
-                return PairingAction.NeedsAttention(latest, "The approved credential is already saved; finish pairing before cancelling")
+                return PairingAction.NeedsAttention(latest, "The approved credential is saved; confirm replacement or discard it with host cleanup")
             }
             return commitFailure(result)
         }

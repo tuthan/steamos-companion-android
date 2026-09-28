@@ -22,4 +22,4 @@ scripts/lan-matrix.sh                           # API 36 with RESTRICT_LOCAL_NET
 
 Two flavors share compileSdk 37: `baseline` targets 36 and is the release target; `target37` is the Android 17 permission-test configuration that adds `ACCESS_LOCAL_NETWORK`. Dependencies are locked (`gradle.lockfile`) and verified (`gradle/verification-metadata.xml`); add nothing to `gradle/libs.versions.toml` without a Socket review row in the build decision record.
 
-No production screens, transport, or storage exist yet. Phase progress and evidence live in the documentation vault under `steamos-companion/android/`.
+The production transport, encrypted storage, and Compose screen tree are in progress. The [Phase 11 acceptance audit](docs/phase-11-progress.md) records the integrated checks and open gates; phase plans live in the documentation vault under `steamos-companion/android/`. A signed release and physical-device acceptance evidence are still pending.

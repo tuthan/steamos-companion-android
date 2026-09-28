@@ -1,6 +1,8 @@
 package io.github.tuthan.steamoscompanion.core.client
 
 import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.protocol.asObject
@@ -16,7 +18,9 @@ import org.junit.Test
 class PersistentStateCodecTest {
     @Test
     fun roundTripsActiveCandidateSecretsAndExactJournalBody() {
-        val host = testActiveHost().copy(lastObservedBootId = "00000000-0000-4000-8000-000000000001")
+        val host = testActiveHost().copy(lastObservedBootId = "00000000-0000-4000-8000-000000000001",
+            cachedRecoveryProfiles = listOf(DisplayRecoveryProfile("profile-1", "HDMI-A-1",
+                DisplayModeSummary("mode-1", 1920, 1080, "60"))))
         val request = testPowerRequest()
         val body = BoundedJson.encode(request.body!!)
         val entry = JournalEntry.create(1, host, request, body, 1_790_000_000_000)
@@ -109,7 +113,7 @@ class PersistentStateCodecTest {
         )
         val migrated = PersistentStateCodec.migrateKnownDocument(v1)!!
         val decoded = PersistentStateCodec.decodeCurrent(migrated)
-        assertEquals(3, decoded.schemaVersion)
+        assertEquals(6, decoded.schemaVersion)
         assertEquals(3, decoded.pairingGeneration)
         assertEquals("client-new", decoded.candidate!!.clientId)
         assertEquals(testCandidate().verificationNonce, decoded.candidate!!.verificationNonce)
@@ -170,7 +174,8 @@ class PersistentStateCodecTest {
                 ),
             ),
         )
-        val hostV2 = JsonValue.ObjectValue(current["active_host"]!!.asObject("active_host").fields - "last_observed_boot_id")
+        val hostV2 = JsonValue.ObjectValue(current["active_host"]!!.asObject("active_host").fields -
+            setOf("last_observed_boot_id", "cached_recovery_profiles"))
         val candidateV2 = JsonValue.ObjectValue(
             current["candidate"]!!.asObject("candidate").fields + ("legacy_pairing_code" to JsonValue.NullValue),
         )
@@ -185,8 +190,9 @@ class PersistentStateCodecTest {
             ),
         )
         val migrated = PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(v2)!!)
-        assertEquals(3, migrated.schemaVersion)
+        assertEquals(6, migrated.schemaVersion)
         assertEquals(null, migrated.activeHost!!.lastObservedBootId)
+        assertEquals(null, migrated.activeHost!!.cachedRecoveryProfiles)
         assertEquals("client-new", migrated.candidate!!.clientId)
 
         val legacyCandidate = JsonValue.ObjectValue(
@@ -199,6 +205,62 @@ class PersistentStateCodecTest {
         )
         val legacyV2 = JsonValue.ObjectValue(v2.fields + ("candidate" to legacyCandidate))
         assertEquals(null, PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(legacyV2)!!).candidate)
+    }
+
+    @Test
+    fun schemaThreeAddsEmptyRecoveryCacheWithoutChangingTheActiveCredential() {
+        val host = testActiveHost()
+        val current = PersistentStateCodec.parseDocument(PersistentStateCodec.encode(PersistentState(activeHost = host)))
+        val oldHost = JsonValue.ObjectValue(current["active_host"]!!.asObject("active_host").fields - "cached_recovery_profiles")
+        val old = JsonValue.ObjectValue(current.fields + mapOf(
+            "schema_version" to JsonValue.NumberValue("3"), "active_host" to oldHost,
+        ))
+        val migrated = PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(old)!!)
+        assertEquals(6, migrated.schemaVersion)
+        assertEquals(host, migrated.activeHost)
+        assertEquals(null, migrated.activeHost!!.cachedRecoveryProfiles)
+    }
+
+    @Test
+    fun schemaFourKeepsHistoricalJournalWithoutInventingCredentialProvenance() {
+        val host = testActiveHost()
+        val request = testPowerRequest()
+        val entry = JournalEntry.create(1, host, request, BoundedJson.encode(request.body!!), 100)
+        val current = PersistentStateCodec.parseDocument(PersistentStateCodec.encode(
+            PersistentState(activeHost = host, journal = listOf(entry))))
+        val oldEntry = JsonValue.ObjectValue(current["journal"]!!.let { (it as JsonValue.ArrayValue).values.single() }
+            .asObject("journal").fields - setOf("original_paired_at_ms", "original_bearer_sha256", "rejection_code"))
+        val old = JsonValue.ObjectValue(current.fields + mapOf(
+            "schema_version" to JsonValue.NumberValue("4"),
+            "journal" to JsonValue.ArrayValue(listOf(oldEntry)),
+        ))
+        val migrated = PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(old)!!)
+        assertEquals(6, migrated.schemaVersion)
+        assertEquals(null, migrated.journal.single().originalPairedAtMillis)
+        assertEquals(null, migrated.journal.single().originalBearerSha256)
+        assertEquals(false, migrated.journal.single().belongsTo(host))
+        assertEquals(true, migrated.journal.single().mayConflictWith(host))
+    }
+
+    @Test
+    fun schemaFivePreservesJournalButDoesNotInventARejectionReason() {
+        val host = testActiveHost()
+        val request = testPowerRequest()
+        val entry = JournalEntry.create(1, host, request, BoundedJson.encode(request.body!!), 100)
+            .copy(phase = JournalPhase.FAILED, resultSummary = "Rejected HTTP 409: mutation_conflict")
+        val current = PersistentStateCodec.parseDocument(PersistentStateCodec.encode(
+            PersistentState(activeHost = host, journal = listOf(entry))))
+        val oldEntry = JsonValue.ObjectValue(current["journal"]!!.let { (it as JsonValue.ArrayValue).values.single() }
+            .asObject("journal").fields - "rejection_code")
+        val old = JsonValue.ObjectValue(current.fields + mapOf(
+            "schema_version" to JsonValue.NumberValue("5"),
+            "journal" to JsonValue.ArrayValue(listOf(oldEntry)),
+        ))
+
+        val migrated = PersistentStateCodec.decodeCurrent(PersistentStateCodec.migrateKnownDocument(old)!!)
+        assertEquals(6, migrated.schemaVersion)
+        assertEquals(null, migrated.journal.single().rejectionCode)
+        assertEquals(entry.resultSummary, migrated.journal.single().resultSummary)
     }
 
     @Test

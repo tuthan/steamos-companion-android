@@ -8,6 +8,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.ProtocolCodec
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.protocol.OperationState
+import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
 import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
 
@@ -44,7 +45,7 @@ class OperationJournal(
                 ?: throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "There is no active paired host")
             if (current.hostId != expected.hostId || current.clientId != expected.clientId ||
                 current.endpoint != expected.endpoint || current.certificatePin != expected.certificatePin ||
-                current.pairedAtMillis != expected.pairedAtMillis
+                current.pairedAtMillis != expected.pairedAtMillis || current.bearerToken != expected.bearerToken
             ) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed")
             PreparedTarget(current, request, state)
         }
@@ -132,6 +133,9 @@ class OperationJournal(
         val preparedCommit = repository.transact { state ->
             val target = prepare(state)
             val host = target.host
+            if (request.bearerToken != host.bearerToken) {
+                throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Mutation credential differs from selected pairing")
+            }
             val pruned = pruneExpiredTerminalEntries(state.journal, now)
             if (pruned.any { it.hostId == host.hostId && it.clientId == host.clientId && it.requestId == request.requestId() }) {
                 throw StateInvariantException(StateInvariantCode.DUPLICATE_REQUEST_ID, "Request ID is already journaled")
@@ -149,6 +153,15 @@ class OperationJournal(
                 journal = pruned + entry,
             )
             val room = makeRoom(nextState)
+            if (encoded.route.route != ApiRoute.PAIR_REVOKE_SELF) {
+                val unresolved = room.filter {
+                    it.localGeneration != entry.localGeneration && it.phase.unresolved && it.mayConflictWith(host)
+                }
+                if (unresolved.isNotEmpty() && !(unresolved.size == 1 &&
+                    isOwnedPreviewRecovery(unresolved.single(), host, request))
+                ) throw StateInvariantException(StateInvariantCode.OPERATION_UNRESOLVED,
+                    "A conflicting host operation is unresolved")
+            }
             preparedEntry = entry
             preparedTarget = target
             target.state.copy(journal = room)
@@ -167,10 +180,13 @@ class OperationJournal(
         } catch (_: Exception) {
             RequestOutcome.Unknown(TransportFailure.IO)
         }
-        val operationId = (remoteOutcome as? RequestOutcome.Reply)
+        val operation = (remoteOutcome as? RequestOutcome.Reply)
             ?.response.let { it as? ApiReply.Versioned }
             ?.payload.let { it as? VersionedPayload.Mutation }
-            ?.operation?.id
+            ?.operation
+        val operationId = operation?.takeIf {
+            it.requestId == entry.requestId && it.kind == entry.expectedOperationKind()
+        }?.id
         val postCommit = repository.transact { state ->
             val index = state.journal.indexOfFirst { it.localGeneration == entry.localGeneration }
             if (index < 0) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Prepared journal entry disappeared")
@@ -181,8 +197,13 @@ class OperationJournal(
             val updated = applyOutcome(old, remoteOutcome, now)
             val nextJournal = state.journal.toMutableList().also { it[index] = updated }
             val revokeCompleted = updated.path == ApiRoute.PAIR_REVOKE_SELF.path && updated.phase == JournalPhase.SUCCEEDED
+            val active = state.activeHost
+            val revocationTargetsActive = active != null && active.hostId == target.host.hostId &&
+                active.clientId == target.host.clientId && active.endpoint == target.host.endpoint &&
+                active.certificatePin == target.host.certificatePin && active.pairedAtMillis == target.host.pairedAtMillis &&
+                active.bearerToken == target.host.bearerToken
             state.copy(
-                activeHost = if (revokeCompleted && state.activeHost?.clientId == updated.clientId && state.activeHost.hostId == updated.hostId) null else state.activeHost,
+                activeHost = if (revokeCompleted && revocationTargetsActive) null else active,
                 journal = nextJournal,
             )
         }
@@ -202,19 +223,41 @@ class OperationJournal(
         val state: PersistentState,
     )
 
-    /** Called once when a process recovers durable PREPARED records after a restart. */
-    fun recoverPreparedEntries(): JournalUpdateResult = update { state ->
-        val now = clock.wallTimeMillis().coerceAtLeast(0)
-        state.copy(journal = state.journal.map { entry ->
-            if (entry.phase == JournalPhase.PREPARED) entry.copy(
-                phase = JournalPhase.UNKNOWN,
-                updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
-                resultSummary = "Process ended before a result was saved; the earlier action may have run.",
-            ) else entry
-        })
+    private fun isOwnedPreviewRecovery(entry: JournalEntry, host: ActiveHost, request: ApiRequest): Boolean {
+        if (!entry.belongsTo(host) || entry.path != ApiRoute.DISPLAY_PREVIEW.path || entry.operationId == null) return false
+        return when (request.path) {
+            ApiRoute.DISPLAY_CONFIRM.path ->
+                (request.body?.fields?.get("preview_id") as? JsonValue.StringValue)?.value == entry.operationId
+            ApiRoute.DISPLAY_RESTORE.path ->
+                (request.body?.fields?.get("source") as? JsonValue.StringValue)?.value == "preview"
+            else -> false
+        }
+    }
+
+    /** Called before a recreated process exposes controls; empty recovery must not create state. */
+    fun recoverPreparedEntries(): JournalUpdateResult {
+        when (val loaded = repository.load()) {
+            StateLoadResult.Empty -> return JournalUpdateResult.Saved
+            is StateLoadResult.Ready -> if (loaded.state.journal.none { it.phase == JournalPhase.PREPARED }) {
+                return JournalUpdateResult.Saved
+            }
+            is StateLoadResult.Unavailable -> return JournalUpdateResult.PersistenceUnavailable(loaded.reason)
+            is StateLoadResult.Failed -> return JournalUpdateResult.PersistenceFailed(loaded.reason)
+        }
+        return update { state ->
+            val now = clock.wallTimeMillis().coerceAtLeast(0)
+            state.copy(journal = state.journal.map { entry ->
+                if (entry.phase == JournalPhase.PREPARED) entry.copy(
+                    phase = JournalPhase.UNKNOWN,
+                    updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
+                    resultSummary = "Process ended before a result was saved; the earlier action may have run.",
+                ) else entry
+            })
+        }
     }
 
     fun applyOperationSnapshot(
+        expectedHost: ActiveHost,
         localGeneration: Long,
         responseHostId: String,
         responseClientId: String,
@@ -222,15 +265,20 @@ class OperationJournal(
         responseCertificatePin: String,
         operationId: String,
         operationRequestId: String,
+        operationKind: String,
         operationState: WireValue<OperationState>,
         outcome: String?,
         nowMillis: Long = clock.wallTimeMillis(),
     ): JournalUpdateResult = update { state ->
+        if (!samePairing(state.activeHost, expectedHost)) {
+            throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed during operation lookup")
+        }
         val index = state.journal.indexOfFirst { it.localGeneration == localGeneration }
         if (index < 0) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Journal entry no longer exists")
         val old = state.journal[index]
-        if (old.hostId != responseHostId || old.clientId != responseClientId || old.originalEndpoint != responseEndpoint ||
-            old.originalCertificatePin != responseCertificatePin || old.operationId != operationId || old.requestId != operationRequestId
+        if (!old.belongsTo(expectedHost) || old.hostId != responseHostId || old.clientId != responseClientId || old.originalEndpoint != responseEndpoint ||
+            old.originalCertificatePin != responseCertificatePin || old.operationId != operationId ||
+            old.requestId != operationRequestId || old.expectedOperationKind() != operationKind
         ) throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Operation reply does not match the journal entry")
         val phase = phaseFor(operationState)
         if (!canTransition(old.phase, phase)) throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Operation state moved backwards")
@@ -239,12 +287,14 @@ class OperationJournal(
             phase = phase,
             updatedAtMillis = nowMillis.coerceAtLeast(old.updatedAtMillis),
             resultSummary = summary,
+            rejectionCode = operationFailureCode(phase, outcome),
         ).validated()
         state.copy(journal = state.journal.toMutableList().also { it[index] = updated })
     }
 
     /** A 404/not-found lookup is unresolved and never authorizes replay. */
     fun markOperationNotFound(
+        expectedHost: ActiveHost,
         localGeneration: Long,
         responseHostId: String,
         responseClientId: String,
@@ -254,10 +304,13 @@ class OperationJournal(
         operationRequestId: String,
         nowMillis: Long = clock.wallTimeMillis(),
     ): JournalUpdateResult = update { state ->
+        if (!samePairing(state.activeHost, expectedHost)) {
+            throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed during operation lookup")
+        }
         val index = state.journal.indexOfFirst { it.localGeneration == localGeneration }
         if (index < 0) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Journal entry no longer exists")
         val old = state.journal[index]
-        if (old.hostId != responseHostId || old.clientId != responseClientId || old.originalEndpoint != responseEndpoint ||
+        if (!old.belongsTo(expectedHost) || old.hostId != responseHostId || old.clientId != responseClientId || old.originalEndpoint != responseEndpoint ||
             old.originalCertificatePin != responseCertificatePin || old.operationId != operationId || old.requestId != operationRequestId
         ) throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Not-found reply does not match the journal entry")
         if (!old.phase.unresolved) throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Terminal operation cannot become unresolved")
@@ -325,6 +378,7 @@ class OperationJournal(
             phase = JournalPhase.FAILED,
             updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
             resultSummary = "Rejected HTTP ${outcome.response.status}: ${outcome.response.error}",
+            rejectionCode = rejectionCode(entry, outcome.response),
         )
         is RequestOutcome.Unknown -> entry.copy(
             phase = JournalPhase.UNKNOWN,
@@ -345,9 +399,7 @@ class OperationJournal(
                     updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
                     resultSummary = "No operation record was returned; the earlier action may have run.",
                 )
-            if (operation.requestId != entry.requestId ||
-                entry.path == ApiRoute.PAIR_REVOKE_SELF.path && operation.kind != "pair.revoke-self"
-            ) return entry.copy(
+            if (operation.requestId != entry.requestId || operation.kind != entry.expectedOperationKind()) return entry.copy(
                 phase = JournalPhase.UNKNOWN,
                 updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
                 resultSummary = "Operation identity did not match the dispatched request; the earlier action may have run.",
@@ -358,9 +410,29 @@ class OperationJournal(
                 operationId = operation.id,
                 updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
                 resultSummary = summary(operation.state, operation.outcome),
+                rejectionCode = operationFailureCode(phase, operation.outcome),
             )
         }
     }.validated()
+
+    private fun rejectionCode(entry: JournalEntry, reply: ApiReply.Rejected): JournalRejectionCode = when {
+        entry.path == ApiRoute.DISPLAY_SAVE_CURRENT.path && reply.status == 404 ->
+            JournalRejectionCode.SAVE_CURRENT_UNSUPPORTED
+        reply.error == "profile_not_found" -> JournalRejectionCode.PROFILE_NOT_FOUND
+        reply.error == "stale_target" -> JournalRejectionCode.STALE_TARGET
+        reply.error == "mutation_conflict" -> JournalRejectionCode.MUTATION_CONFLICT
+        reply.error == "bridge_unavailable" -> JournalRejectionCode.BRIDGE_UNAVAILABLE
+        reply.error == "readback_not_confirmed" -> JournalRejectionCode.READBACK_NOT_CONFIRMED
+        reply.error == "preview_not_found" -> JournalRejectionCode.PREVIEW_NOT_FOUND
+        reply.error == "preview_expired" -> JournalRejectionCode.PREVIEW_EXPIRED
+        reply.error == "forbidden" -> JournalRejectionCode.FORBIDDEN
+        else -> JournalRejectionCode.OTHER_REJECTION
+    }
+
+    private fun operationFailureCode(phase: JournalPhase, outcome: String?): JournalRejectionCode? =
+        if (phase != JournalPhase.FAILED) null
+        else if (outcome == "readback_not_confirmed") JournalRejectionCode.READBACK_NOT_CONFIRMED
+        else JournalRejectionCode.OPERATION_FAILED
 
     private fun phaseFor(state: WireValue<OperationState>): JournalPhase = when (state) {
         is WireValue.Unknown -> JournalPhase.UNKNOWN
@@ -400,6 +472,11 @@ class OperationJournal(
     private fun ApiRequest.requestId(): String = body?.fields?.get("request_id")?.let {
         (it as? io.github.tuthan.steamoscompanion.core.protocol.JsonValue.StringValue)?.value
     } ?: throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Mutation request ID is missing")
+
+    private fun samePairing(active: ActiveHost?, expected: ActiveHost): Boolean = active != null &&
+        active.hostId == expected.hostId && active.clientId == expected.clientId &&
+        active.endpoint == expected.endpoint && active.certificatePin == expected.certificatePin &&
+        active.pairedAtMillis == expected.pairedAtMillis && active.bearerToken == expected.bearerToken
 
     private companion object {
         const val TERMINAL_RETENTION_MILLIS = 7L * 24 * 60 * 60 * 1000

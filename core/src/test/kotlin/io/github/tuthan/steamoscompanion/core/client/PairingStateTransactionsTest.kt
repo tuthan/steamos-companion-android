@@ -45,14 +45,21 @@ class PairingStateTransactionsTest {
         store.failNextWrite = true
         assertEquals(
             StateCommitResult.Failed(StatePersistenceFailure.IO),
-            transactions.acceptApprovedCandidate(generation),
+            transactions.acceptApprovedCandidateFor(generation, oldHost),
         )
         val afterFailure = (repository.load() as StateLoadResult.Ready).state
         assertEquals(oldHost, afterFailure.activeHost)
         assertEquals(staged, afterFailure.candidate!!.stagedCredential)
         assertEquals(listOf(oldEntry), afterFailure.journal)
 
-        val accepted = transactions.acceptApprovedCandidate(generation) as StateCommitResult.Saved
+        val changedOldHost = oldHost.copy(endpoint = "moved.local:18443")
+        assertTrue(repository.transact { it.copy(activeHost = changedOldHost) } is StateCommitResult.Saved)
+        assertEquals(StateCommitResult.Rejected(StateInvariantCode.STALE_GENERATION),
+            transactions.acceptApprovedCandidateFor(generation, oldHost))
+        assertEquals(changedOldHost, (repository.load() as StateLoadResult.Ready).state.activeHost)
+        assertTrue(repository.transact { it.copy(activeHost = oldHost) } is StateCommitResult.Saved)
+
+        val accepted = transactions.acceptApprovedCandidateFor(generation, oldHost) as StateCommitResult.Saved
         assertEquals(oldHost.hostId, accepted.state.activeHost!!.hostId)
         assertEquals("client-new", accepted.state.activeHost.clientId)
         assertEquals(staged.bearerToken, accepted.state.activeHost.bearerToken)
@@ -115,7 +122,7 @@ class PairingStateTransactionsTest {
         store.failNextWrite = true
         assertEquals(
             StateCommitResult.Failed(StatePersistenceFailure.IO),
-            transactions.forgetActiveHost(active.hostId),
+            transactions.forgetActiveHost(active),
         )
         val afterFailure = (repository.load() as StateLoadResult.Ready).state
         assertEquals(active, afterFailure.activeHost)
@@ -123,7 +130,7 @@ class PairingStateTransactionsTest {
         assertEquals("client-new", afterFailure.candidate!!.clientId)
         assertEquals(listOf(activeEntry, otherEntry), afterFailure.journal)
 
-        val forgotten = transactions.forgetActiveHost(active.hostId) as StateCommitResult.Saved
+        val forgotten = transactions.forgetActiveHost(active) as StateCommitResult.Saved
         assertNull(forgotten.state.activeHost)
         assertNull(forgotten.state.candidate)
         assertEquals(generation + 1, forgotten.state.pairingGeneration)
@@ -159,7 +166,7 @@ class PairingStateTransactionsTest {
         )
         assertEquals(
             StateCommitResult.Rejected(StateInvariantCode.INVALID_CANDIDATE),
-            transactions.forgetActiveHost(active.hostId),
+            transactions.forgetActiveHost(active),
         )
         val state = (repository.load() as StateLoadResult.Ready).state
         assertEquals(active, state.activeHost)

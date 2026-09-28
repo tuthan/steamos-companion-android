@@ -226,7 +226,7 @@ class PairingCoordinatorTest {
     }
 
     @Test
-    fun approvalStoresCredentialScopesPinEndpointAndWakeTargetWithoutAnotherWakeStep() {
+    fun replacementApprovalWaitsForExactOldHostConfirmationBeforeSwapping() {
         val oldHost = testActiveHost(hostId = "old-host", endpoint = "old.local:18443", token = "old-token")
         val rig = rig(handler = { candidate, request, _ ->
             if (request.body!!.fields.containsKey("pairing_session")) {
@@ -241,8 +241,14 @@ class PairingCoordinatorTest {
         assertEquals(1, rig.gateway.requests.size)
 
         rig.clock.now += 2_000
-        val approved = rig.coordinator.poll(pending.candidate.generation).join() as PairingAction.Approved
-        val active = approved.activeHost
+        val staged = rig.coordinator.poll(pending.candidate.generation).join() as PairingAction.ReplacementReady
+        assertEquals(oldHost.hostId, staged.currentHostId)
+        assertEquals(TEST_HOST, staged.proposedHostId)
+        assertEquals(oldHost, (rig.repository.load() as StateLoadResult.Ready).state.activeHost)
+        assertTrue(rig.coordinator.resume().join() is PairingAction.ReplacementReady)
+        val approved = PairingStateTransactions(rig.repository)
+            .acceptApprovedCandidateFor(staged.candidateGeneration, oldHost) as StateCommitResult.Saved
+        val active = requireNotNull(approved.state.activeHost)
         assertEquals(TEST_HOST, active.hostId)
         assertEquals(pending.candidate.clientId, active.clientId)
         assertEquals(TEST_PIN, active.certificatePin)

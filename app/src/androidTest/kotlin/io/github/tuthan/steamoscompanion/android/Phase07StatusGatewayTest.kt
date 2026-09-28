@@ -7,6 +7,7 @@ import io.github.tuthan.steamoscompanion.android.data.AndroidClock
 import io.github.tuthan.steamoscompanion.android.data.AndroidSocketFactory
 import io.github.tuthan.steamoscompanion.android.data.PinnedCertificateChanged
 import io.github.tuthan.steamoscompanion.android.data.PinnedStatusGateway
+import io.github.tuthan.steamoscompanion.android.data.PinnedOperationLookup
 import io.github.tuthan.steamoscompanion.android.fakehost.FakeHost
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.ConnectionRemoval
@@ -23,7 +24,10 @@ import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.PinnedHttpTransport
 import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
+import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
+import io.github.tuthan.steamoscompanion.core.protocol.ApiReply
+import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import java.net.DatagramSocket
 import java.net.Socket
 import org.junit.Assert.assertEquals
@@ -36,6 +40,29 @@ import org.junit.runner.RunWith
 /** Exercises the Phase 07 reader against pinned TLS and the production Android state store. */
 @RunWith(AndroidJUnit4::class)
 class Phase07StatusGatewayTest {
+    @Test fun pinnedOperationLookupUsesSavedCredentialAndExactOperationPath() {
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        FakeHost(assets).use { host ->
+            val operationId = "op-fixture0001xxxxxxxxxxxxx"
+            val path = "/v1/operations/$operationId"
+            host.default("GET", path, FakeHost.Reply.Fixture("fixtures/contract/operations/accepted.json"))
+            val paired = activeHost(host)
+            val network = loopbackNetwork(host)
+            val lookup = PinnedOperationLookup(PinnedHttpTransport(AndroidClock(), network, AndroidSocketFactory()), network)
+
+            val result = lookup.get(paired, operationId)
+            host.assertHealthy()
+            assertTrue("Unexpected lookup result: $result; paths=${host.requests.map { it.path }}", result is RequestOutcome.Reply)
+
+            val operation = (((result as RequestOutcome.Reply).response as ApiReply.Versioned).payload as VersionedPayload.Operation).operation
+            assertEquals(operationId, operation.id)
+            assertEquals("power-1", operation.requestId)
+            assertEquals(listOf(path), host.requests.map { it.path })
+            assertEquals("Bearer fixture-status-token", host.requests.single().headers["authorization"])
+            host.assertHealthy()
+        }
+    }
+
     @Test fun lostRevokeReplyKeepsCredentialUntilExplicitForget() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
@@ -107,7 +134,7 @@ class Phase07StatusGatewayTest {
         FakeHost(assets).use { host ->
             try {
                 host.default("GET", "/v1/status", FakeHost.Reply.Body(200, "fixtures/status-sunshine-running.json"))
-                host.default("GET", "/v1/display/outputs", FakeHost.Reply.Body(200, "fixtures/outputs-working.json"))
+                host.default("GET", "/v1/display/outputs", FakeHost.Reply.Fixture("fixtures/contract/display-outputs/with-profile.json"))
                 host.default("GET", "/v1/display/order", FakeHost.Reply.Fixture("fixtures/contract/display-order-get/available.json"))
                 val paired = activeHost(host)
                 assertTrue(repository.transact { it.copy(activeHost = paired) } is StateCommitResult.Saved)
@@ -119,6 +146,7 @@ class Phase07StatusGatewayTest {
                 assertNotNull(read.outputs)
                 assertNotNull(read.order)
                 assertNotNull(read.timing)
+                assertNotNull(read.outputsTiming)
                 assertEquals(
                     listOf("/v1/status", "/v1/display/outputs", "/v1/display/order"),
                     host.requests.map { it.path },
@@ -128,6 +156,8 @@ class Phase07StatusGatewayTest {
                     "fixture-boot",
                     (repository.load() as StateLoadResult.Ready).state.activeHost?.lastObservedBootId,
                 )
+                assertEquals(read.outputs!!.profiles,
+                    (repository.load() as StateLoadResult.Ready).state.activeHost?.cachedRecoveryProfiles)
                 host.assertHealthy()
             } finally { repository.reset() }
         }

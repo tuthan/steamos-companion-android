@@ -56,8 +56,12 @@ class PairingStateTransactions(private val repository: EncryptedStateRepository)
         state.copy(pairingGeneration = increment(state.pairingGeneration), candidate = null)
     }
 
-    /** The old credential remains active unless the approved candidate and its credential commit together. */
-    fun acceptApprovedCandidate(expectedGeneration: Long): StateCommitResult = repository.transact { state ->
+    /** Confirmation is bound to the pairing that was displayed, including the no-host first-pair case. */
+    fun acceptApprovedCandidateFor(expectedGeneration: Long, expectedActiveHost: ActiveHost?): StateCommitResult =
+        repository.transact { state ->
+        if (!samePairingIdentity(state.activeHost, expectedActiveHost)) {
+            throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Active pairing changed before replacement confirmation")
+        }
         val candidate = state.candidate
         if (candidate == null || state.pairingGeneration != expectedGeneration || candidate.generation != expectedGeneration) {
             throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Approved candidate is no longer current")
@@ -80,30 +84,20 @@ class PairingStateTransactions(private val repository: EncryptedStateRepository)
         state.copy(pairingGeneration = increment(state.pairingGeneration), activeHost = active, candidate = null)
     }
 
+    private fun samePairingIdentity(current: ActiveHost?, expected: ActiveHost?): Boolean = when {
+        current == null || expected == null -> current == null && expected == null
+        else -> current.hostId == expected.hostId && current.clientId == expected.clientId &&
+            current.endpoint == expected.endpoint && current.certificatePin == expected.certificatePin &&
+            current.pairedAtMillis == expected.pairedAtMillis && current.bearerToken == expected.bearerToken
+    }
+
     /** Explicit Forget clears only the selected host's journal context and invalidates callbacks. */
     fun forgetActiveHost(expected: ActiveHost): StateCommitResult = repository.transact { state ->
         val active = state.activeHost
         if (active == null || active.hostId != expected.hostId || active.clientId != expected.clientId ||
             active.endpoint != expected.endpoint || active.certificatePin != expected.certificatePin ||
-            active.pairedAtMillis != expected.pairedAtMillis
+            active.pairedAtMillis != expected.pairedAtMillis || active.bearerToken != expected.bearerToken
         ) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed")
-        if (state.candidate?.phase == CandidatePhase.APPROVED_STAGED) {
-            throw StateInvariantException(StateInvariantCode.INVALID_CANDIDATE, "Approved credentials must be self-revoked before Forget")
-        }
-        state.copy(
-            pairingGeneration = increment(state.pairingGeneration),
-            activeHost = null,
-            candidate = null,
-            journal = state.journal.filterNot { it.hostId == active.hostId && it.clientId == active.clientId },
-        )
-    }
-
-    /** Kept for older callers that only retained a host ID. Prefer the full-identity overload. */
-    fun forgetActiveHost(expectedHostId: String): StateCommitResult = repository.transact { state ->
-        val active = state.activeHost
-        if (active == null || active.hostId != expectedHostId) {
-            throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected host changed")
-        }
         if (state.candidate?.phase == CandidatePhase.APPROVED_STAGED) {
             throw StateInvariantException(StateInvariantCode.INVALID_CANDIDATE, "Approved credentials must be self-revoked before Forget")
         }

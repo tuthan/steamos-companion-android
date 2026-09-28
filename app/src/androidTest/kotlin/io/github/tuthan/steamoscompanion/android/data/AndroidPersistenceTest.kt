@@ -13,7 +13,31 @@ import io.github.tuthan.steamoscompanion.core.client.StateLoadResult
 import io.github.tuthan.steamoscompanion.core.client.StateResetResult
 import io.github.tuthan.steamoscompanion.core.client.StateUnavailableReason
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
+import io.github.tuthan.steamoscompanion.core.client.CandidatePhase
+import io.github.tuthan.steamoscompanion.core.client.ConnectionReplacement
+import io.github.tuthan.steamoscompanion.core.client.ReplacementDiscardResult
+import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
+import io.github.tuthan.steamoscompanion.core.client.JournalEntry
+import io.github.tuthan.steamoscompanion.core.client.JournalPhase
+import io.github.tuthan.steamoscompanion.core.client.OperationJournal
+import io.github.tuthan.steamoscompanion.core.client.PairingCandidate
+import io.github.tuthan.steamoscompanion.core.client.PairingStateTransactions
+import io.github.tuthan.steamoscompanion.core.client.PairingVariant
+import io.github.tuthan.steamoscompanion.core.client.PendingDisplayResult
+import io.github.tuthan.steamoscompanion.core.client.PreviewPresentation
+import io.github.tuthan.steamoscompanion.core.client.StatusPollState
+import io.github.tuthan.steamoscompanion.core.client.StagedCredential
 import io.github.tuthan.steamoscompanion.core.client.StoredWakeTarget
+import io.github.tuthan.steamoscompanion.core.protocol.ApiRequest
+import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
+import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
+import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
+import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
+import io.github.tuthan.steamoscompanion.core.protocol.jsonObject
+import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
+import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -76,6 +100,139 @@ class AndroidPersistenceTest {
 
         val hardware = cipher.hardwareBacked()
         Log.i("Phase04Storage", "Android Keystore AES key hardware backed=$hardware api=${Build.VERSION.SDK_INT} aes=${KeyProperties.KEY_ALGORITHM_AES}")
+    }
+
+    @Test
+    fun reopeningAndroidStorePreservesRecoveryProfileAndPendingPreviewCard() {
+        val host = activeHost().copy(grantedScopes = listOf("status.read", "power.control", "display.control"))
+        val profile = DisplayRecoveryProfile("profile-persistence", "1",
+            DisplayModeSummary("mode-current", 1920, 1080, "60"))
+        val request = ApiRequest(HttpMethod.POST, ApiRoute.DISPLAY_PREVIEW.path,
+            jsonObject(
+                "request_id" to JsonValue.StringValue("preview-persistence"),
+                "output_id" to JsonValue.StringValue("1"),
+                "mode_id" to JsonValue.StringValue("mode-target"),
+                "generation" to JsonValue.NumberValue("4"),
+            ), host.bearerToken)
+        val entry = JournalEntry.create(1, host, request, BoundedJson.encode(request.body!!), 1_790_000_000_100)
+            .copy(phase = JournalPhase.ACCEPTED, operationId = "op-persistence")
+        assertTrue(repository.transact { it.copy(activeHost = host, journal = listOf(entry)) } is StateCommitResult.Saved)
+        assertTrue(repository.recordRecoveryProfiles(host, listOf(profile)) is StateCommitResult.Saved)
+
+        val reopened = EncryptedStateRepository(AndroidAtomicStateStore(baseFile), AndroidKeystoreStateCipher())
+        val state = (reopened.load() as StateLoadResult.Ready).state
+        assertEquals(listOf(profile), state.activeHost?.cachedRecoveryProfiles)
+        assertEquals(entry, state.journal.single())
+        assertEquals(PreviewPresentation.Pending(PendingDisplayResult.CHECKING_PREVIEW, 1),
+            DisplayRecoveryPresentation.project(host, state, StatusPollState(), 1_000_000_000L))
+    }
+
+    @Test
+    fun stagedReplacementKeepsOldHostUntilAtomicConfirmAcrossReopenedAndroidStores() {
+        val oldHost = activeHost()
+        val oldRequest = ApiRequest(HttpMethod.POST, ApiRoute.POWER.path,
+            jsonObject("request_id" to JsonValue.StringValue("old-power"),
+                "action" to JsonValue.StringValue("suspend")), oldHost.bearerToken)
+        val oldEntry = JournalEntry.create(1, oldHost, oldRequest, BoundedJson.encode(oldRequest.body!!),
+            1_790_000_000_100)
+        assertTrue(repository.transact { it.copy(activeHost = oldHost, journal = listOf(oldEntry)) } is StateCommitResult.Saved)
+        val candidate = PairingCandidate(
+            generation = 0, variant = PairingVariant.VERIFICATION,
+            clientId = "replacement-client", clientName = "Android Companion",
+            requestedScopes = listOf("status.read"), endpoint = "new-deck.local:18443",
+            certificatePin = "sha256:" + "cd".repeat(32), hostId = null,
+            createdAtMillis = 1_790_000_000_000, expiresAtMillis = null,
+            phase = CandidatePhase.READY, verificationNonce = "AbCdEfGhIjKlMnOpQrStUv",
+        )
+        val begun = PairingStateTransactions(repository).beginCandidate(candidate) as StateCommitResult.Saved
+        val generation = requireNotNull(begun.state.candidate).generation
+
+        val afterStart = EncryptedStateRepository(AndroidAtomicStateStore(baseFile), AndroidKeystoreStateCipher())
+        assertEquals(oldHost, (afterStart.load() as StateLoadResult.Ready).state.activeHost)
+        val staged = StagedCredential("replacement-client", "replacement-host", "replacement-token-0001",
+            listOf("status.read"), StoredWakeTarget(false, null, null, null, null), 1_790_000_000_050)
+        assertTrue(PairingStateTransactions(afterStart).updateCandidate(generation) {
+            it.copy(hostId = staged.hostId, pairingId = "replacement-pair", phase = CandidatePhase.APPROVED_STAGED,
+                verificationNonce = null, stagedCredential = staged)
+        } is StateCommitResult.Saved)
+
+        val afterApproval = EncryptedStateRepository(AndroidAtomicStateStore(baseFile), AndroidKeystoreStateCipher())
+        val beforeConfirm = (afterApproval.load() as StateLoadResult.Ready).state
+        assertEquals(oldHost, beforeConfirm.activeHost)
+        assertEquals(CandidatePhase.APPROVED_STAGED, beforeConfirm.candidate?.phase)
+        val replacement = ConnectionReplacement(PairingStateTransactions(afterApproval),
+            OperationJournal(afterApproval, AndroidClock()))
+        assertTrue(replacement.confirm(oldHost, generation) is StateCommitResult.Saved)
+
+        val afterSwap = EncryptedStateRepository(AndroidAtomicStateStore(baseFile), AndroidKeystoreStateCipher())
+        val swapped = (afterSwap.load() as StateLoadResult.Ready).state
+        assertEquals("replacement-host", swapped.activeHost?.hostId)
+        assertEquals(null, swapped.candidate)
+        assertEquals(listOf(oldEntry), swapped.journal)
+    }
+
+    @Test
+    fun lostDiscardCleanupRetainsOldHostAndItsMutationLaneAcrossReopen() {
+        val oldHost = activeHost()
+        val oldRequest = ApiRequest(HttpMethod.POST, ApiRoute.POWER.path,
+            jsonObject("request_id" to JsonValue.StringValue("old-before-discard"),
+                "action" to JsonValue.StringValue("suspend")), oldHost.bearerToken)
+        val oldEntry = JournalEntry.create(1, oldHost, oldRequest, BoundedJson.encode(oldRequest.body!!),
+            AndroidClock().wallTimeMillis())
+            .copy(phase = JournalPhase.FAILED, resultSummary = "Not sent")
+        assertTrue(repository.transact { it.copy(activeHost = oldHost, journal = listOf(oldEntry)) } is StateCommitResult.Saved)
+        val candidate = PairingCandidate(
+            generation = 0, variant = PairingVariant.VERIFICATION,
+            clientId = "discard-client", clientName = "Android Companion",
+            requestedScopes = listOf("status.read"), endpoint = "discard-deck.local:18443",
+            certificatePin = "sha256:" + "cd".repeat(32), hostId = null,
+            createdAtMillis = 1_790_000_000_000, expiresAtMillis = null,
+            phase = CandidatePhase.READY, verificationNonce = "AbCdEfGhIjKlMnOpQrStUv",
+        )
+        val begun = PairingStateTransactions(repository).beginCandidate(candidate) as StateCommitResult.Saved
+        val generation = requireNotNull(begun.state.candidate).generation
+        val staged = StagedCredential("discard-client", "discard-host", "discard-token-0001",
+            listOf("status.read"), StoredWakeTarget(false, null, null, null, null), 1_790_000_000_050)
+        assertTrue(PairingStateTransactions(repository).updateCandidate(generation) {
+            it.copy(hostId = staged.hostId, pairingId = "discard-pair", phase = CandidatePhase.APPROVED_STAGED,
+                verificationNonce = null, stagedCredential = staged)
+        } is StateCommitResult.Saved)
+
+        val afterApproval = EncryptedStateRepository(AndroidAtomicStateStore(baseFile), AndroidKeystoreStateCipher())
+        val replacement = ConnectionReplacement(PairingStateTransactions(afterApproval),
+            OperationJournal(afterApproval, AndroidClock()))
+        var cleanupSends = 0
+        val discard = replacement.discard(generation) { target, request, _ ->
+            cleanupSends++
+            assertEquals(staged.hostId, target.hostId)
+            assertEquals(staged.bearerToken, target.bearerToken)
+            assertEquals(ApiRoute.PAIR_REVOKE_SELF.path, request.path)
+            RequestOutcome.Unknown(TransportFailure.IO)
+        } as ReplacementDiscardResult.HostRemovalUnconfirmed
+        assertEquals(1, cleanupSends)
+        assertEquals(JournalPhase.UNKNOWN, discard.entry.phase)
+
+        val reopened = EncryptedStateRepository(AndroidAtomicStateStore(baseFile), AndroidKeystoreStateCipher())
+        val state = (reopened.load() as StateLoadResult.Ready).state
+        assertEquals(oldHost, state.activeHost)
+        assertEquals(null, state.candidate)
+        assertEquals(2, state.journal.size)
+        assertEquals(oldEntry, state.journal.single { it.hostId == oldHost.hostId })
+        val cleanup = state.journal.single { it.hostId == staged.hostId }
+        assertEquals(JournalPhase.UNKNOWN, cleanup.phase)
+        assertEquals(staged.clientId, cleanup.clientId)
+
+        var oldHostSends = 0
+        val newRequest = oldRequest.copy(body = jsonObject(
+            "request_id" to JsonValue.StringValue("old-after-discard"),
+            "action" to JsonValue.StringValue("restart")))
+        val oldHostAction = OperationJournal(reopened, AndroidClock()).dispatchForHost(oldHost, newRequest) { target, _, _ ->
+            oldHostSends++
+            assertEquals(oldHost, target)
+            RequestOutcome.NotSent(TransportFailure.CONNECT)
+        }
+        assertTrue(oldHostAction is io.github.tuthan.steamoscompanion.core.client.JournalDispatchResult.Finished)
+        assertEquals(1, oldHostSends)
     }
 
     @Test

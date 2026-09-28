@@ -4,10 +4,12 @@ import org.w3c.dom.Element
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "io.github.tuthan.steamoscompanion"
+    buildFeatures { compose = true }
     // compileSdk 37 serves both flavors; runtime behavior follows each flavor's targetSdk.
     compileSdk = 37
 
@@ -32,6 +34,7 @@ android {
         create("target37") {
             dimension = "target"
             targetSdk = 37
+            testInstrumentationRunner = "io.github.tuthan.steamoscompanion.android.data.ProcessDeathInstrumentation"
         }
     }
 
@@ -68,6 +71,7 @@ android {
     }
 
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         managedDevices {
             localDevices {
                 create("api27") { device = "Pixel 2"; apiLevel = 27; systemImageSource = "aosp"; require64Bit = true }
@@ -94,11 +98,27 @@ kotlin {
 dependencies {
     implementation(project(":core"))
     implementation(libs.zxing.core)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.robolectric)
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.bouncycastle.tls)
     androidTestImplementation(libs.bouncycastle.prov)
     androidTestImplementation(libs.bouncycastle.util)
@@ -190,6 +210,13 @@ val checkMergedManifests = tasks.register("checkMergedManifests") {
     dependsOn(manifestChecks)
 }
 
+val verifyCompanionTokens = tasks.register<Exec>("verifyCompanionTokens") {
+    group = "verification"
+    description = "Rejects literal UI colours and writes the Phase 06 palette-token usage report."
+    commandLine("python3", rootProject.file("scripts/phase06-token-audit.py").absolutePath, "--report",
+        layout.buildDirectory.file("reports/phase06-token-usage.txt").get().asFile.absolutePath)
+}
+
 tasks.named("check") {
-    dependsOn(checkMergedManifests)
+    dependsOn(checkMergedManifests, verifyCompanionTokens)
 }

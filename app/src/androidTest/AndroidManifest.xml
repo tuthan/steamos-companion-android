@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="io.github.tuthan.steamoscompanion.android.data.DiagnosticTestProvider"
+            android:authorities="io.github.tuthan.steamoscompanion.test.diagnostics"
+            android:exported="true" />
+    </application>
+</manifest>

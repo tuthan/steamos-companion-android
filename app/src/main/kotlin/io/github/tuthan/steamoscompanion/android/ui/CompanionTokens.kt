@@ -14,6 +14,8 @@ data class CompanionPalette(
     val textSoft: Long,
     val textDim: Long,
     val white: Long,
+    /** Title colour: white on dark surfaces, the navy body colour on light ones. */
+    val heading: Long,
     val blue: Long,
     val blueBright: Long,
     val blueDeep: Long,
@@ -28,6 +30,8 @@ data class CompanionPalette(
     val gradGreenEnd: Long,
     val gradProgressStart: Long,
     val gradProgressEnd: Long,
+    /** Always the dark navy body colour; the green gradient keeps a dark label in both themes (R10). */
+    val gradGreenLabel: Long,
 )
 
 /** Fixed brand palettes. Dynamic Material color is intentionally not part of the app. */
@@ -45,6 +49,7 @@ object CompanionColors {
         textSoft = 0xFFDFE6EC,
         textDim = 0xFF8F98A0,
         white = 0xFFFFFFFF,
+        heading = 0xFFFFFFFF,
         blue = 0xFF66C0F4,
         blueBright = 0xFF1A9FFF,
         blueDeep = 0xFF417A9B,
@@ -59,6 +64,7 @@ object CompanionColors {
         gradGreenEnd = 0xFF7FA82A,
         gradProgressStart = 0xFF67C1F5,
         gradProgressEnd = 0xFF1A9FFF,
+        gradGreenLabel = 0xFF1B2838,
     )
 
     val light = CompanionPalette(
@@ -74,6 +80,7 @@ object CompanionColors {
         textSoft = 0xFF253746,
         textDim = 0xFF5C6873,
         white = 0xFFFFFFFF,
+        heading = 0xFF1B2838,
         blue = 0xFF2A6F97,
         blueBright = 0xFF1A9FFF,
         blueDeep = 0xFF417A9B,
@@ -88,6 +95,7 @@ object CompanionColors {
         gradGreenEnd = 0xFF7FA82A,
         gradProgressStart = 0xFF67C1F5,
         gradProgressEnd = 0xFF1A9FFF,
+        gradGreenLabel = 0xFF1B2838,
     )
 }
 
@@ -104,6 +112,18 @@ object CompanionType {
     const val MONO_VALUE_SP = 13f
     const val MODE_ROW_SP = 16f
     const val DECORATIVE_SCALE_CAP = 1.3f
+}
+
+/** Tint alphas the design profile prescribes for ghost fills, badges, chips, and danger rows. */
+object CompanionAlpha {
+    const val GHOST_FILL = .12f
+    const val GHOST_BORDER = .35f
+    const val BADGE_FILL = .14f
+    const val CHIP_FILL = .12f
+    const val DANGER_FILL = .06f
+    const val DANGER_BORDER = .40f
+    const val SELECTED_FILL = .10f
+    const val GLOW = .55f
 }
 
 object CompanionShapes {

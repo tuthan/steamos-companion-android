@@ -3,6 +3,7 @@ package io.github.tuthan.steamoscompanion.core.client
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRequest
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
 import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
 import io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException
@@ -15,7 +16,7 @@ object PersistentStateLimits {
     const val MAX_ENVELOPE_BYTES = 65 * 1024
     const val MAX_JOURNAL_ENTRIES = 32
     const val MAX_OPERATION_BODY_BYTES = 4 * 1024
-    const val CURRENT_SCHEMA_VERSION = 3
+    const val CURRENT_SCHEMA_VERSION = 6
     const val ENVELOPE_FORMAT_VERSION = 1
     const val STATE_KEY_ALIAS = "steamos-companion-android-state-v1"
     const val STATE_AAD = "steamos-companion:android:state:v1"
@@ -31,6 +32,7 @@ enum class StateInvariantCode {
     STATE_TOO_LARGE,
     HISTORY_FULL,
     DUPLICATE_REQUEST_ID,
+    OPERATION_UNRESOLVED,
     STALE_GENERATION,
     NEWER_SCHEMA,
 }
@@ -73,6 +75,8 @@ data class ActiveHost(
     val wakeTarget: StoredWakeTarget,
     val pairedAtMillis: Long,
     val lastObservedBootId: String? = null,
+    /** Null means no successful recovery inventory has been observed for this pairing. */
+    val cachedRecoveryProfiles: List<DisplayRecoveryProfile>? = null,
 ) {
     fun validated(): ActiveHost {
         requireText(hostId, "host ID", 128)
@@ -83,6 +87,20 @@ data class ActiveHost(
         validateScopes(grantedScopes)
         wakeTarget.validated()
         lastObservedBootId?.let { requireText(it, "host boot ID", 128) }
+        cachedRecoveryProfiles?.let { profiles ->
+            if (profiles.size > 8 || profiles.map { it.id }.distinct().size != profiles.size) {
+                invalid(StateInvariantCode.INVALID_FIELD, "Invalid cached recovery profiles")
+            }
+            profiles.forEach { profile ->
+                requireText(profile.id, "recovery profile ID", 128)
+                requireText(profile.outputId, "recovery output ID", 128)
+                requireText(profile.mode.id, "recovery mode ID", 128)
+                if (profile.mode.width !in 1..16384 || profile.mode.height !in 1..16384) {
+                    invalid(StateInvariantCode.INVALID_FIELD, "Invalid cached recovery mode size")
+                }
+                profile.mode.refreshHz?.let { requireText(it, "recovery refresh rate", 32) }
+            }
+        }
         if (pairedAtMillis < 0) invalid(StateInvariantCode.INVALID_FIELD, "Invalid paired timestamp")
         return this
     }
@@ -264,12 +282,30 @@ enum class JournalPhase(val wireValue: String, val unresolved: Boolean) {
     FAILED("failed", false),
 }
 
+/** Fixed host failure facts; UI guidance must not depend on a free-form host message. */
+enum class JournalRejectionCode(val wireValue: String) {
+    SAVE_CURRENT_UNSUPPORTED("save_current_unsupported"),
+    PROFILE_NOT_FOUND("profile_not_found"),
+    STALE_TARGET("stale_target"),
+    MUTATION_CONFLICT("mutation_conflict"),
+    BRIDGE_UNAVAILABLE("bridge_unavailable"),
+    READBACK_NOT_CONFIRMED("readback_not_confirmed"),
+    PREVIEW_NOT_FOUND("preview_not_found"),
+    PREVIEW_EXPIRED("preview_expired"),
+    FORBIDDEN("forbidden"),
+    OPERATION_FAILED("operation_failed"),
+    OTHER_REJECTION("other_rejection"),
+}
+
 data class JournalEntry(
     val localGeneration: Long,
     val hostId: String,
     val clientId: String,
     val originalEndpoint: String,
     val originalCertificatePin: String,
+    /** Null for entries migrated from before credential provenance was recorded. */
+    val originalPairedAtMillis: Long?,
+    val originalBearerSha256: String?,
     val method: String,
     val path: String,
     val requestId: String,
@@ -282,6 +318,7 @@ data class JournalEntry(
     val updatedAtMillis: Long,
     val resultSummary: String?,
     val acknowledged: Boolean,
+    val rejectionCode: JournalRejectionCode? = null,
 ) {
     fun bodyBytes(): ByteArray = try {
         Base64.getDecoder().decode(bodyBase64)
@@ -295,6 +332,10 @@ data class JournalEntry(
         requireId(clientId, "client ID")
         validateEndpoint(originalEndpoint)
         validatePin(originalCertificatePin)
+        if ((originalPairedAtMillis == null) != (originalBearerSha256 == null) ||
+            (originalPairedAtMillis != null && originalPairedAtMillis < 0) ||
+            (originalBearerSha256 != null && !Regex("[0-9a-f]{64}").matches(originalBearerSha256))
+        ) invalid(StateInvariantCode.INVALID_JOURNAL, "Invalid original pairing identity")
         if (method != HttpMethod.POST.wireValue) invalid(StateInvariantCode.INVALID_JOURNAL, "Only POST mutations are journaled")
         requireId(requestId, "request ID")
         val route = try {
@@ -327,6 +368,9 @@ data class JournalEntry(
         hostBootId?.let { requireText(it, "host boot ID", 128) }
         if (createdAtMillis < 0 || updatedAtMillis < createdAtMillis) invalid(StateInvariantCode.INVALID_JOURNAL, "Journal timestamps are invalid")
         resultSummary?.let { requireText(it, "result summary", 1024, allowEmpty = true) }
+        if (rejectionCode != null && phase != JournalPhase.FAILED) {
+            invalid(StateInvariantCode.INVALID_JOURNAL, "Rejection code requires failed journal phase")
+        }
         if (phase in setOf(JournalPhase.ACCEPTED, JournalPhase.DISPATCHED, JournalPhase.OBSERVED_RETURN, JournalPhase.SUCCEEDED) && operationId == null) {
             invalid(StateInvariantCode.INVALID_JOURNAL, "Journal phase needs an operation ID")
         }
@@ -377,6 +421,8 @@ data class JournalEntry(
                 clientId = host.clientId,
                 originalEndpoint = host.endpoint,
                 originalCertificatePin = host.certificatePin,
+                originalPairedAtMillis = host.pairedAtMillis,
+                originalBearerSha256 = sha256Hex(host.bearerToken.toByteArray(Charsets.UTF_8)),
                 method = HttpMethod.POST.wireValue,
                 path = request.path,
                 requestId = requestId,

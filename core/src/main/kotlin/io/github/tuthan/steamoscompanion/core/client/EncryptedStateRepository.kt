@@ -9,6 +9,7 @@ import io.github.tuthan.steamoscompanion.core.ports.StateAuthenticationException
 import io.github.tuthan.steamoscompanion.core.ports.StateStore
 import io.github.tuthan.steamoscompanion.core.ports.StateStoreInvalidDataException
 import io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -58,13 +59,36 @@ class EncryptedStateRepository(
                 active.clientId == expectedHost.clientId &&
                 active.endpoint == expectedHost.endpoint &&
                 active.certificatePin == expectedHost.certificatePin &&
-                active.pairedAtMillis == expectedHost.pairedAtMillis
+                active.pairedAtMillis == expectedHost.pairedAtMillis && active.bearerToken == expectedHost.bearerToken
             if (!identityStillMatches) {
                 throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Status belongs to a replaced host identity")
             }
             state.copy(activeHost = active.copy(lastObservedBootId = updatedHost.lastObservedBootId))
         }
     }
+
+    /** Cache only a host-read exact recovery target for the same active credential. */
+    fun recordRecoveryProfiles(expectedHost: ActiveHost, profiles: List<DisplayRecoveryProfile>): StateCommitResult {
+        val snapshot = profiles.toList()
+        try { expectedHost.copy(cachedRecoveryProfiles = snapshot).validated() }
+        catch (_: IllegalArgumentException) { return StateCommitResult.Rejected(StateInvariantCode.INVALID_FIELD) }
+        val loaded = load()
+        if (loaded is StateLoadResult.Ready && sameActiveCredential(loaded.state.activeHost, expectedHost) &&
+            loaded.state.activeHost?.cachedRecoveryProfiles == snapshot
+        ) return StateCommitResult.Saved(loaded.state)
+        return transact { state ->
+            val active = state.activeHost
+            if (!sameActiveCredential(active, expectedHost)) {
+                throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Recovery inventory belongs to a replaced host identity")
+            }
+            state.copy(activeHost = active!!.copy(cachedRecoveryProfiles = snapshot))
+        }
+    }
+
+    private fun sameActiveCredential(active: ActiveHost?, expected: ActiveHost): Boolean =
+        active != null && active.hostId == expected.hostId && active.clientId == expected.clientId &&
+            active.endpoint == expected.endpoint && active.certificatePin == expected.certificatePin &&
+            active.pairedAtMillis == expected.pairedAtMillis && active.bearerToken == expected.bearerToken
 
     fun transact(transform: (PersistentState) -> PersistentState): StateCommitResult = PROCESS_LOCK.withLock {
         val current = when (val loaded = loadLocked()) {

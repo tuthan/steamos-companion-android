@@ -194,12 +194,31 @@ class PinnedHttpTransport(
         pin: String,
         request: ApiRequest,
         cancellation: CancellationSignal? = null,
+    ): RequestOutcome = executeInternal(target, pin, request, null, cancellation)
+
+    /** Sends the exact body committed by the operation journal; a mismatch never opens a socket. */
+    fun executePrepared(
+        target: TransportTarget,
+        pin: String,
+        request: ApiRequest,
+        exactSerializedBody: ByteArray,
+    ): RequestOutcome = executeInternal(target, pin, request, exactSerializedBody, null)
+
+    private fun executeInternal(
+        target: TransportTarget,
+        pin: String,
+        request: ApiRequest,
+        preparedBody: ByteArray?,
+        cancellation: CancellationSignal?,
     ): RequestOutcome {
         val encoded = try {
             ProtocolCodec.encodeRequest(request)
         } catch (_: RequestValidationException) {
             return RequestOutcome.NotSent(TransportFailure.VALIDATION)
         } catch (_: IllegalArgumentException) {
+            return RequestOutcome.NotSent(TransportFailure.VALIDATION)
+        }
+        if (preparedBody != null && !encoded.body.contentEquals(preparedBody)) {
             return RequestOutcome.NotSent(TransportFailure.VALIDATION)
         }
         if (!PIN.matches(pin)) return RequestOutcome.NotSent(TransportFailure.VALIDATION)
@@ -213,7 +232,7 @@ class PinnedHttpTransport(
             else -> DEFAULT_BUDGET_MS
         }
         return exchange(
-            target, pin, request, encoded.body, encoded.route.route, encoded.route.operationId,
+            target, pin, request, preparedBody?.copyOf() ?: encoded.body, encoded.route.route, encoded.route.operationId,
             initialPairing, budget, cancellation,
         )
     }

@@ -87,8 +87,31 @@ object ProtocolCodec {
         else -> VersionedPayload.Mutation(
             operation = (body["operation"] as? JsonValue.ObjectValue)?.let(::parseOperation),
             body = body,
+            profile = if (route == ApiRoute.DISPLAY_CONFIRM || route == ApiRoute.DISPLAY_SAVE_CURRENT) {
+                body["profile"].takeOptionalObject("profile")?.let(::parseRecoveryProfile)
+            } else null,
+            preview = if (route == ApiRoute.DISPLAY_PREVIEW) {
+                body["preview"].takeOptionalObject("preview")?.let(::parseDisplayPreview)
+            } else null,
         ).also {
             if (it.operation == null) throw JsonFormatException("Accepted mutation response has no operation")
+            val operationBody = body["operation"] as JsonValue.ObjectValue
+            if (it.preview != null && it.preview.id != it.operation.id) {
+                throw JsonFormatException("Preview ID does not match the returned operation")
+            }
+            if (it.preview != null) {
+                val declaredPreviewId = operationBody["preview_id"].nullableString("operation.preview_id", 128)
+                if (declaredPreviewId != null && declaredPreviewId != it.preview.id) {
+                    throw JsonFormatException("Preview ID conflicts with the operation preview ID")
+                }
+            }
+            if (it.profile != null) {
+                val target = operationBody["target"].takeOptionalObject("operation.target")
+                val targetProfileId = target?.get("profile_id").nullableString("operation.target.profile_id", 128)
+                if (targetProfileId != null && targetProfileId != it.profile.id) {
+                    throw JsonFormatException("Profile ID does not match the returned operation target")
+                }
+            }
         }
     }
 
@@ -215,26 +238,57 @@ object ProtocolCodec {
             val id = bounded(output["id"].asString("output.id"), "output.id", 128)
             val name = output["name"].nullableString("output.name", 256)
             output["description"].nullableString("output.description", 256)
-            output["is_internal"].nullableBoolean("output.is_internal")
+            val isInternal = output["is_internal"].nullableBoolean("output.is_internal")
             val currentMode = output["current_mode_id"].nullableString("output.current_mode_id", 128)
             val outputGeneration = nonnegativeLong(output["generation"] ?: throw JsonFormatException("Output generation is missing"), "output.generation")
             val modes = output["modes"].asArray("output.modes")
             if (modes.size > 256) throw JsonFormatException("Too many display modes")
-            modes.forEachIndexed { modeIndex, modeValue ->
-                val mode = modeValue.asObject("modes[$modeIndex]")
-                bounded(mode["id"].asString("mode.id"), "mode.id", 128)
-                positiveLong(mode["width"] ?: throw JsonFormatException("Mode width is missing"), "mode.width", 16384)
-                positiveLong(mode["height"] ?: throw JsonFormatException("Mode height is missing"), "mode.height", 16384)
-                mode["refresh_hz"].nullableNumber("mode.refresh_hz")
+            val parsedModes = modes.mapIndexed { modeIndex, modeValue ->
+                parseDisplayMode(modeValue.asObject("modes[$modeIndex]"))
             }
+            if (parsedModes.map { it.id }.distinct().size != parsedModes.size) throw JsonFormatException("Duplicate display mode ID")
             if (output["rgb_range"] != null && nonnegativeLong(output["rgb_range"]!!, "output.rgb_range") !in 0..2) {
                 throw JsonFormatException("Invalid output rgb_range")
             }
-            DisplayOutputSummary(id, name, currentMode, outputGeneration, modes.size)
+            DisplayOutputSummary(id, name, currentMode, outputGeneration, modes.size, isInternal, parsedModes)
         }
         if (available && generation == null && !legacyShape) throw JsonFormatException("Available display outputs need a generation")
-        return VersionedPayload.DisplayOutputs(available, generation, outputs, legacyShape, body)
+        val profiles = body["profiles"]?.let { value ->
+            val items = value.asArray("profiles")
+            if (items.size > 8) throw JsonFormatException("Too many recovery profiles")
+            items.mapIndexed { index, item -> parseRecoveryProfile(item.asObject("profiles[$index]")) }
+        }.orEmpty()
+        val preview = body["preview"].takeOptionalObject("preview")?.let(::parseDisplayPreview)
+        return VersionedPayload.DisplayOutputs(available, generation, outputs, legacyShape, body, profiles, preview)
     }
+
+    private fun parseRecoveryProfile(profile: JsonValue.ObjectValue): DisplayRecoveryProfile = DisplayRecoveryProfile(
+        bounded(profile["id"].asString("profile.id"), "profile.id", 128),
+        bounded(profile["output_id"].asString("profile.output_id"), "profile.output_id", 128),
+        parseDisplayMode(profile["mode"].asObject("profile.mode")),
+    )
+
+    private fun parseDisplayPreview(item: JsonValue.ObjectValue): DisplayPreviewSummary = DisplayPreviewSummary(
+        bounded(item["preview_id"].asString("preview.preview_id"), "preview.preview_id", 128),
+        bounded(item["output_id"].asString("preview.output_id"), "preview.output_id", 128),
+        nonnegativeLong(item["generation"] ?: throw JsonFormatException("Preview generation is missing"), "preview.generation"),
+        parseDisplayMode(item["baseline_mode"].asObject("preview.baseline_mode")),
+        parseDisplayMode(item["target_mode"].asObject("preview.target_mode")),
+        item["deadline"].nullableNumber("preview.deadline")
+            ?: throw JsonFormatException("Preview deadline is missing"),
+    )
+
+    private fun JsonValue?.takeOptionalObject(name: String): JsonValue.ObjectValue? = when (this) {
+        null, JsonValue.NullValue -> null
+        else -> asObject(name)
+    }
+
+    private fun parseDisplayMode(mode: JsonValue.ObjectValue): DisplayModeSummary = DisplayModeSummary(
+        bounded(mode["id"].asString("mode.id"), "mode.id", 128),
+        positiveLong(mode["width"] ?: throw JsonFormatException("Mode width is missing"), "mode.width", 16384),
+        positiveLong(mode["height"] ?: throw JsonFormatException("Mode height is missing"), "mode.height", 16384),
+        mode["refresh_hz"].nullableNumber("mode.refresh_hz"),
+    )
 
     private fun parseDisplayOrder(body: JsonValue.ObjectValue): DisplayOrderSummary {
         val value = body["display_order"].asObject("display_order")

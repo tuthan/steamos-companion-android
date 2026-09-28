@@ -310,10 +310,19 @@ sealed interface VersionedPayload {
         val outputs: List<DisplayOutputSummary>,
         val legacyShape: Boolean,
         val body: JsonValue.ObjectValue,
+        val profiles: List<DisplayRecoveryProfile> = emptyList(),
+        val preview: DisplayPreviewSummary? = null,
     ) : VersionedPayload
     data class DisplayOrder(val snapshot: DisplayOrderSummary, val body: JsonValue.ObjectValue) : VersionedPayload
     data class Operation(val operation: OperationSummary) : VersionedPayload
-    data class Mutation(val operation: OperationSummary?, val body: JsonValue.ObjectValue) : VersionedPayload
+    data class Mutation(
+        val operation: OperationSummary?,
+        val body: JsonValue.ObjectValue,
+        /** Host profile fact; callers still bind the operation to the dispatched journal entry. */
+        val profile: DisplayRecoveryProfile? = null,
+        /** Host preview fact with the operation ID as its preview ID. */
+        val preview: DisplayPreviewSummary? = null,
+    ) : VersionedPayload
 }
 
 data class PairedCredential(
@@ -337,6 +346,32 @@ data class DisplayOutputSummary(
     val currentModeId: String?,
     val generation: Long,
     val modeCount: Int,
+    val isInternal: Boolean? = null,
+    val modes: List<DisplayModeSummary> = emptyList(),
+)
+
+data class DisplayModeSummary(
+    val id: String,
+    val width: Long,
+    val height: Long,
+    /** Exact host value, kept for labels when rounded refresh values coincide. */
+    val refreshHz: String?,
+)
+
+data class DisplayRecoveryProfile(
+    val id: String,
+    val outputId: String,
+    val mode: DisplayModeSummary,
+)
+
+data class DisplayPreviewSummary(
+    val id: String,
+    val outputId: String,
+    val generation: Long,
+    val baselineMode: DisplayModeSummary,
+    val targetMode: DisplayModeSummary,
+    /** Host wall-clock deadline in seconds; UI must anchor it to response timing. */
+    val deadlineSeconds: String,
 )
 
 data class DisplayOrderSummary(

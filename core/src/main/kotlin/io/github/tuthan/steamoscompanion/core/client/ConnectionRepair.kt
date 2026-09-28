@@ -39,7 +39,7 @@ class ConnectionRepair(
                 ?: throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Paired host is missing")
             if (current.hostId != expected.hostId || current.clientId != expected.clientId ||
                 current.endpoint != expected.endpoint || current.certificatePin != expected.certificatePin ||
-                current.pairedAtMillis != expected.pairedAtMillis
+                current.pairedAtMillis != expected.pairedAtMillis || current.bearerToken != expected.bearerToken
             ) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Pairing changed during address verification")
             state.copy(activeHost = current.copy(endpoint = endpoint.authority))
         }

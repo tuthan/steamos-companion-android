@@ -76,7 +76,7 @@ class PinnedStatusGateway(
             ?: throw IllegalStateException("Paired state is unavailable")
         if (saved.hostId != host.hostId || saved.clientId != host.clientId ||
             saved.endpoint != host.endpoint || saved.certificatePin != host.certificatePin ||
-            saved.pairedAtMillis != host.pairedAtMillis
+            saved.pairedAtMillis != host.pairedAtMillis || saved.bearerToken != host.bearerToken
         ) throw IllegalStateException("Active pairing changed during status read")
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
         if (saved.lastObservedBootId != status.bootId) {
@@ -84,14 +84,20 @@ class PinnedStatusGateway(
             if (stored !is StateCommitResult.Saved) throw IllegalStateException("Active pairing changed during status read")
         }
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
-        val outputs = try { fetch(ApiRoute.DISPLAY_OUTPUTS).first as? VersionedPayload.DisplayOutputs }
+        val (outputsPayload, outputsTiming) = try { fetch(ApiRoute.DISPLAY_OUTPUTS) }
         catch (error: PinnedCertificateChanged) { throw error }
-        catch (_: IOException) { null }
+        catch (_: IOException) { null to null }
+        val outputs = outputsPayload as? VersionedPayload.DisplayOutputs
+        if (cancellation.isCancelled) throw IOException("Status read cancelled")
+        if (outputs != null && outputs.available && !outputs.legacyShape) {
+            val stored = repository.recordRecoveryProfiles(host, outputs.profiles)
+            if (stored !is StateCommitResult.Saved) throw IllegalStateException("Recovery inventory could not be saved for this pairing")
+        }
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
         val order = try { fetch(ApiRoute.DISPLAY_ORDER).first as? VersionedPayload.DisplayOrder }
         catch (error: PinnedCertificateChanged) { throw error }
         catch (_: IOException) { null }
-        return PairedStatusRead(status, outputs, order, timing)
+        return PairedStatusRead(status, outputs, order, timing, outputsTiming)
     }
 
     private fun failure(route: ApiRoute, reason: TransportFailure): IOException =

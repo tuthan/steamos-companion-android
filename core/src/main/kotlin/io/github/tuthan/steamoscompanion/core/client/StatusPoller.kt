@@ -4,6 +4,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.ResponseTiming
 import java.io.Closeable
+import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.ScheduledFuture
@@ -15,7 +16,35 @@ data class PairedStatusRead(
     val outputs: VersionedPayload.DisplayOutputs?,
     val order: VersionedPayload.DisplayOrder?,
     val timing: ResponseTiming? = null,
+    val outputsTiming: ResponseTiming? = null,
 )
+
+/** Ephemeral provenance for a pinned status observation, without retaining the bearer in UI state. */
+data class StatusObservationSource(
+    val hostId: String,
+    val clientId: String,
+    val endpoint: String,
+    val certificatePin: String,
+    val pairedAtMillis: Long,
+    val bearerSha256: String,
+) {
+    companion object {
+        fun from(host: ActiveHost): StatusObservationSource {
+            val digest = MessageDigest.getInstance("SHA-256").digest(host.bearerToken.toByteArray(Charsets.UTF_8))
+            val hex = buildString(digest.size * 2) {
+                for (byte in digest) {
+                    val value = byte.toInt() and 0xff
+                    append(HEX[value ushr 4])
+                    append(HEX[value and 15])
+                }
+            }
+            return StatusObservationSource(host.hostId, host.clientId, host.endpoint, host.certificatePin,
+                host.pairedAtMillis, hex)
+        }
+
+        private const val HEX = "0123456789abcdef"
+    }
+}
 
 fun interface PairedStatusGateway {
     /** Implementations must honor cancellation and verify the saved host pin and identity. */
@@ -29,6 +58,7 @@ data class StatusPollState(
     val unreachable: Boolean = false,
     val stale: Boolean = false,
     val error: String? = null,
+    val source: StatusObservationSource? = null,
 ) {
     val headline: StatusHeadline get() = when {
         unreachable -> StatusHeadline.UNREACHABLE
@@ -149,7 +179,8 @@ class StatusPoller(
                 running = null
                 val read = result.getOrNull()?.takeIf { it.status.hostId == host.hostId }
                 published = if (read != null) {
-                    StatusPollState(lastRead = read, lastSuccessMonotonicNanos = finishedAt)
+                    StatusPollState(lastRead = read, lastSuccessMonotonicNanos = finishedAt,
+                        source = StatusObservationSource.from(host))
                 } else {
                     published.copy(reading = false, unreachable = true, error =
                         if (result.isSuccess) "Host identity changed" else result.exceptionOrNull()?.message ?: "Status read failed")

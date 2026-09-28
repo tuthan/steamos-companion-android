@@ -1,6 +1,8 @@
 package io.github.tuthan.steamoscompanion.core.client
 
 import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException
 import io.github.tuthan.steamoscompanion.core.protocol.JsonLimits
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
@@ -57,7 +59,7 @@ object PersistentStateCodec {
         }
     }
 
-    /** Migrate known legacy schemas to v3, dropping the unsupported pairing-code candidate form. */
+    /** Migrate known legacy schemas to v6, without inferring facts missing from old journals. */
     fun migrateKnownDocument(document: JsonValue.ObjectValue): JsonValue.ObjectValue? {
         return when (schemaVersion(document)) {
             0L -> {
@@ -69,7 +71,7 @@ object PersistentStateCodec {
                 }
                 JsonValue.ObjectValue(
                     linkedMapOf(
-                        "schema_version" to number(3),
+                        "schema_version" to number(6),
                         "revision" to document["revision"].asLong("revision").asJson(),
                         "pairing_generation" to number(0),
                         "active_host" to JsonValue.NullValue,
@@ -81,7 +83,7 @@ object PersistentStateCodec {
             1L -> {
                 document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
                 val candidate = document["candidate"].nullableObject("candidate")?.let(::migrateCandidateV1)
-                migrateSchema2Document(JsonValue.ObjectValue(
+                migrateSchema5Document(migrateSchema4Document(migrateSchema3Document(migrateSchema2Document(JsonValue.ObjectValue(
                     linkedMapOf(
                         "schema_version" to number(3),
                         "revision" to document["revision"]!!,
@@ -90,11 +92,61 @@ object PersistentStateCodec {
                         "candidate" to (candidate ?: JsonValue.NullValue),
                         "journal" to document["journal"]!!,
                     ),
-                ))
+                )))))
             }
-            2L -> migrateSchema2Document(document)
+            2L -> migrateSchema5Document(migrateSchema4Document(migrateSchema3Document(migrateSchema2Document(document))))
+            3L -> migrateSchema5Document(migrateSchema4Document(migrateSchema3Document(document)))
+            4L -> migrateSchema5Document(migrateSchema4Document(document))
+            5L -> migrateSchema5Document(document)
             else -> null
         }
+    }
+
+    private fun migrateSchema5Document(document: JsonValue.ObjectValue): JsonValue.ObjectValue {
+        document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
+        val journal = document["journal"].asArray("journal").mapIndexed { index, value ->
+            val entry = value.asObject("journal[$index]")
+            entry.exactKeys(
+                "local_generation", "host_id", "client_id", "original_endpoint", "original_certificate_pin", "original_paired_at_ms", "original_bearer_sha256", "method", "path", "request_id",
+                "body_base64", "body_sha256", "phase", "operation_id", "host_boot_id", "created_at_ms", "updated_at_ms", "result_summary", "acknowledged",
+            )
+            JsonValue.ObjectValue(LinkedHashMap(entry.fields).apply { put("rejection_code", JsonValue.NullValue) })
+        }
+        return JsonValue.ObjectValue(LinkedHashMap(document.fields).apply {
+            put("schema_version", number(6))
+            put("journal", array(journal))
+        })
+    }
+
+    private fun migrateSchema4Document(document: JsonValue.ObjectValue): JsonValue.ObjectValue {
+        document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
+        val journal = document["journal"].asArray("journal").mapIndexed { index, value ->
+            val entry = value.asObject("journal[$index]")
+            entry.exactKeys(
+                "local_generation", "host_id", "client_id", "original_endpoint", "original_certificate_pin", "method", "path", "request_id",
+                "body_base64", "body_sha256", "phase", "operation_id", "host_boot_id", "created_at_ms", "updated_at_ms", "result_summary", "acknowledged",
+            )
+            JsonValue.ObjectValue(LinkedHashMap(entry.fields).apply {
+                put("original_paired_at_ms", JsonValue.NullValue)
+                put("original_bearer_sha256", JsonValue.NullValue)
+            })
+        }
+        return JsonValue.ObjectValue(LinkedHashMap(document.fields).apply {
+            put("schema_version", number(5))
+            put("journal", array(journal))
+        })
+    }
+
+    private fun migrateSchema3Document(document: JsonValue.ObjectValue): JsonValue.ObjectValue {
+        document.exactKeys("schema_version", "revision", "pairing_generation", "active_host", "candidate", "journal")
+        val activeHost = document["active_host"].nullableObject("active_host")?.let { host ->
+            host.exactKeys("host_id", "client_id", "endpoint", "certificate_pin", "bearer_token", "granted_scopes", "wake_target", "paired_at_ms", "last_observed_boot_id")
+            JsonValue.ObjectValue(LinkedHashMap(host.fields).apply { put("cached_recovery_profiles", JsonValue.NullValue) })
+        }
+        return JsonValue.ObjectValue(LinkedHashMap(document.fields).apply {
+            put("schema_version", number(4))
+            put("active_host", activeHost ?: JsonValue.NullValue)
+        })
     }
 
     private fun migrateSchema2Document(document: JsonValue.ObjectValue): JsonValue.ObjectValue {
@@ -175,6 +227,18 @@ object PersistentStateCodec {
         "wake_target" to encodeWakeTarget(host.wakeTarget),
         "paired_at_ms" to host.pairedAtMillis.asJson(),
         "last_observed_boot_id" to host.lastObservedBootId.asJsonOrNull(),
+        "cached_recovery_profiles" to (host.cachedRecoveryProfiles?.let { profiles ->
+            array(profiles.map { profile -> obj(
+                "id" to string(profile.id),
+                "output_id" to string(profile.outputId),
+                "mode" to obj(
+                    "id" to string(profile.mode.id),
+                    "width" to profile.mode.width.asJson(),
+                    "height" to profile.mode.height.asJson(),
+                    "refresh_hz" to profile.mode.refreshHz.asJsonOrNull(),
+                ),
+            ) })
+        } ?: JsonValue.NullValue),
     )
 
     private fun encodeWakeTarget(target: StoredWakeTarget) = obj(
@@ -227,6 +291,8 @@ object PersistentStateCodec {
         "client_id" to string(entry.clientId),
         "original_endpoint" to string(entry.originalEndpoint),
         "original_certificate_pin" to string(entry.originalCertificatePin),
+        "original_paired_at_ms" to (entry.originalPairedAtMillis?.asJson() ?: JsonValue.NullValue),
+        "original_bearer_sha256" to entry.originalBearerSha256.asJsonOrNull(),
         "method" to string(entry.method),
         "path" to string(entry.path),
         "request_id" to string(entry.requestId),
@@ -239,10 +305,11 @@ object PersistentStateCodec {
         "updated_at_ms" to entry.updatedAtMillis.asJson(),
         "result_summary" to entry.resultSummary.asJsonOrNull(),
         "acknowledged" to bool(entry.acknowledged),
+        "rejection_code" to entry.rejectionCode?.wireValue.asJsonOrNull(),
     )
 
     private fun JsonValue.ObjectValue.decodeActiveHost(): ActiveHost {
-        exactKeys("host_id", "client_id", "endpoint", "certificate_pin", "bearer_token", "granted_scopes", "wake_target", "paired_at_ms", "last_observed_boot_id")
+        exactKeys("host_id", "client_id", "endpoint", "certificate_pin", "bearer_token", "granted_scopes", "wake_target", "paired_at_ms", "last_observed_boot_id", "cached_recovery_profiles")
         return ActiveHost(
             hostId = this["host_id"].asString("host_id"),
             clientId = this["client_id"].asString("client_id"),
@@ -253,6 +320,25 @@ object PersistentStateCodec {
             wakeTarget = this["wake_target"].asObject("wake_target").decodeWakeTarget(),
             pairedAtMillis = this["paired_at_ms"].asLong("paired_at_ms"),
             lastObservedBootId = this["last_observed_boot_id"].nullableString("last_observed_boot_id"),
+            cachedRecoveryProfiles = when (val cached = this["cached_recovery_profiles"]) {
+                JsonValue.NullValue -> null
+                else -> cached.asArray("cached_recovery_profiles").mapIndexed { index, value ->
+                    val profile = value.asObject("cached_recovery_profiles[$index]")
+                    profile.exactKeys("id", "output_id", "mode")
+                    val mode = profile["mode"].asObject("mode")
+                    mode.exactKeys("id", "width", "height", "refresh_hz")
+                    DisplayRecoveryProfile(
+                        profile["id"].asString("profile.id"),
+                        profile["output_id"].asString("profile.output_id"),
+                        DisplayModeSummary(
+                            mode["id"].asString("mode.id"),
+                            mode["width"].asLong("mode.width"),
+                            mode["height"].asLong("mode.height"),
+                            mode["refresh_hz"].nullableString("mode.refresh_hz"),
+                        ),
+                    )
+                }
+            },
         )
     }
 
@@ -320,8 +406,8 @@ object PersistentStateCodec {
 
     private fun JsonValue.ObjectValue.decodeJournalEntry(): JournalEntry {
         exactKeys(
-            "local_generation", "host_id", "client_id", "original_endpoint", "original_certificate_pin", "method", "path", "request_id",
-            "body_base64", "body_sha256", "phase", "operation_id", "host_boot_id", "created_at_ms", "updated_at_ms", "result_summary", "acknowledged",
+            "local_generation", "host_id", "client_id", "original_endpoint", "original_certificate_pin", "original_paired_at_ms", "original_bearer_sha256", "method", "path", "request_id",
+            "body_base64", "body_sha256", "phase", "operation_id", "host_boot_id", "created_at_ms", "updated_at_ms", "result_summary", "acknowledged", "rejection_code",
         )
         val phase = JournalPhase.entries.firstOrNull { it.wireValue == this["phase"].asString("phase") }
             ?: throw JsonFormatException("Unknown journal phase")
@@ -331,6 +417,8 @@ object PersistentStateCodec {
             clientId = this["client_id"].asString("client_id"),
             originalEndpoint = this["original_endpoint"].asString("original_endpoint"),
             originalCertificatePin = this["original_certificate_pin"].asString("original_certificate_pin"),
+            originalPairedAtMillis = this["original_paired_at_ms"].nullableLong("original_paired_at_ms"),
+            originalBearerSha256 = this["original_bearer_sha256"].nullableString("original_bearer_sha256"),
             method = this["method"].asString("method"),
             path = this["path"].asString("path"),
             requestId = this["request_id"].asString("request_id"),
@@ -343,6 +431,10 @@ object PersistentStateCodec {
             updatedAtMillis = this["updated_at_ms"].asLong("updated_at_ms"),
             resultSummary = this["result_summary"].nullableString("result_summary"),
             acknowledged = this["acknowledged"].asBoolean("acknowledged"),
+            rejectionCode = this["rejection_code"].nullableString("rejection_code")?.let { code ->
+                JournalRejectionCode.entries.firstOrNull { it.wireValue == code }
+                    ?: throw JsonFormatException("Unknown journal rejection code")
+            },
         )
     }
 

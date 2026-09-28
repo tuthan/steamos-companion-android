@@ -35,7 +35,7 @@ class ConnectionRemovalTest {
 
     @Test fun staleSelectionCannotRevokeOrForgetReplacement() {
         val repository = EncryptedStateRepository(MemoryStateStore(), JvmAesGcmStateCipher())
-        val replacement = host.copy(clientId = "client-2", bearerToken = "other-token")
+        val replacement = host.copy(bearerToken = "other-token")
         assertTrue(repository.transact { it.copy(activeHost = replacement) } is StateCommitResult.Saved)
         val removal = ConnectionRemoval(OperationJournal(repository, clock), PairingStateTransactions(repository))
         val result = removal.revoke(host) { _, _, _ -> error("stale revoke was sent") }

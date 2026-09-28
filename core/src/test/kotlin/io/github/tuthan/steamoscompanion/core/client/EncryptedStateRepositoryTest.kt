@@ -1,6 +1,8 @@
 package io.github.tuthan.steamoscompanion.core.client
 
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import io.github.tuthan.steamoscompanion.core.protocol.jsonObject
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -12,6 +14,29 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EncryptedStateRepositoryTest {
+    @Test
+    fun recoveryCacheIsDurableCredentialBoundAndUnchangedReadsDoNotRewriteIt() {
+        val store = MemoryStateStore()
+        val cipher = JvmAesGcmStateCipher()
+        val repository = EncryptedStateRepository(store, cipher)
+        val host = testActiveHost()
+        val profile = DisplayRecoveryProfile("profile-1", "HDMI-A-1", DisplayModeSummary("mode-1", 1920, 1080, "60"))
+        repository.transact { it.copy(activeHost = host) }
+        val saved = repository.recordRecoveryProfiles(host, listOf(profile)) as StateCommitResult.Saved
+        val bytes = store.rawBytes()!!
+        val same = repository.recordRecoveryProfiles(host, listOf(profile)) as StateCommitResult.Saved
+        assertEquals(saved.state.revision, same.state.revision)
+        assertArrayEquals(bytes, store.rawBytes())
+        assertEquals(listOf(profile),
+            (EncryptedStateRepository(store, cipher).load() as StateLoadResult.Ready).state.activeHost?.cachedRecoveryProfiles)
+
+        val rotated = host.copy(bearerToken = "rotated-token-xxxxxxxxxxxxxxxxxxxxxxxx")
+        repository.transact { it.copy(activeHost = rotated) }
+        assertEquals(StateCommitResult.Rejected(StateInvariantCode.INVALID_IDENTITY),
+            repository.recordRecoveryProfiles(host, listOf(profile)))
+        assertEquals(null, (repository.load() as StateLoadResult.Ready).state.activeHost?.cachedRecoveryProfiles)
+    }
+
     @Test
     fun commitsAndReopensOnlyCiphertextAndKeepsOldStateAfterWriteFailure() {
         val store = MemoryStateStore()
@@ -93,7 +118,7 @@ class EncryptedStateRepositoryTest {
         assertEquals(9L, migrated.state.revision)
         assertNotEquals(oldBytes.toList(), store.rawBytes()!!.toList())
 
-        val newer = jsonObject("schema_version" to JsonValue.NumberValue("4"), "future" to JsonValue.StringValue("retain"))
+        val newer = jsonObject("schema_version" to JsonValue.NumberValue("7"), "future" to JsonValue.StringValue("retain"))
         FakePreparedEnvelope(cipher, store, io.github.tuthan.steamoscompanion.core.protocol.BoundedJson.encode(newer))
         val newerBytes = store.rawBytes()!!
         assertEquals(StateLoadResult.Unavailable(StateUnavailableReason.APP_UPDATE_REQUIRED), repository.load())

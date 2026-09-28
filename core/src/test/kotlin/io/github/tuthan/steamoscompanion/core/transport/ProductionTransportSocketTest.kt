@@ -11,6 +11,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
 import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
+import io.github.tuthan.steamoscompanion.core.protocol.ProtocolCodec
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.protocol.asLong
 import io.github.tuthan.steamoscompanion.core.protocol.asObject
@@ -57,6 +58,28 @@ import org.junit.Test
 
 /** Exercises the production transport against a JVM loopback TLS host using the shipped test key. */
 class ProductionTransportSocketTest {
+    @Test
+    fun preparedMutationRejectsMismatchedBodyAndSendsCommittedBytes() {
+        FakeTlsHost().use { host ->
+            host.script("POST /v1/power", Reply.Lost)
+            val request = ApiRequest(
+                HttpMethod.POST, "/v1/power",
+                jsonObject("request_id" to JsonValue.StringValue("prepared-power"),
+                    "action" to JsonValue.StringValue("suspend")),
+                "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx",
+            )
+            val exactBody = ProtocolCodec.encodeRequest(request).body
+            val transport = transport()
+            assertEquals(RequestOutcome.NotSent(TransportFailure.VALIDATION),
+                transport.executePrepared(target(host), host.pin, request, "{}".toByteArray()))
+            assertTrue(host.requests.isEmpty())
+
+            assertTrue(transport.executePrepared(target(host), host.pin, request, exactBody) is RequestOutcome.Unknown)
+            assertEquals(String(exactBody, Charsets.UTF_8), host.requests.single().body)
+            host.assertHealthy()
+        }
+    }
+
     @Test
     fun requiredLocalNetworkPermissionBlocksBeforeDnsOrSocketCreation() {
         val resolutions = AtomicInteger()

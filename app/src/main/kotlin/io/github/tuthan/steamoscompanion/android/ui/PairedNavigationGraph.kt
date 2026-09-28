@@ -179,7 +179,9 @@ class PairedNavigationGraph private constructor(private val backStack: MutableLi
 
         private fun canNavigate(from: UiDestination, to: UiDestination): Boolean = when (from) {
             UiDestination.ONBOARDING -> to in setOf(UiDestination.DISCOVERY, UiDestination.MANUAL_ADDRESS, UiDestination.SCANNER)
-            UiDestination.DISCOVERY -> to in setOf(UiDestination.ONBOARDING, UiDestination.CANDIDATE_DETAILS)
+            UiDestination.DISCOVERY -> to in setOf(
+                UiDestination.ONBOARDING, UiDestination.CANDIDATE_DETAILS, UiDestination.MANUAL_ADDRESS,
+            )
             UiDestination.MANUAL_ADDRESS -> to in setOf(UiDestination.ONBOARDING, UiDestination.CANDIDATE_DETAILS)
             UiDestination.CANDIDATE_DETAILS -> to in setOf(
                 UiDestination.ONBOARDING,

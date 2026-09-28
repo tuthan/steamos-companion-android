@@ -125,4 +125,15 @@
     <string name="ui_pair_another_device">Pair with another device</string>
     <string name="ui_edit_address">Edit address</string>
     <string name="ui_export_sanitized_diagnostics">Export sanitized diagnostics</string>
+    <string name="ui_wordmark_strong">SteamOS</string>
+    <string name="ui_wordmark_light">Companion</string>
+    <string name="ui_pill_lan_only">LAN only</string>
+    <string name="ui_pill_pinned_tls">Pinned TLS</string>
+    <string name="ui_pill_code_never_sent">Code never sent</string>
+    <string name="ui_back">Back</string>
+    <string name="ui_remote_device">Remote device</string>
+    <string name="ui_recovery">Recovery</string>
+    <string name="ui_pairing_with">Pairing with</string>
+    <string name="ui_requested_access">Requested access</string>
+    <string name="ui_cancel_search">Cancel search</string>
 </resources>

@@ -73,6 +73,7 @@ class StatusPollerTest {
         try {
             poller.start()
             assertTrue(first.await(2, TimeUnit.SECONDS))
+            assertEquals(StatusObservationSource.from(host), poller.state.source)
             now.addAndGet(StatusPoller.STALE_NANOS + 1)
             assertTrue(await(2_000) { poller.state.stale })
             poller.refresh()

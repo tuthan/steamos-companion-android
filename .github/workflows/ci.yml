@@ -29,5 +29,5 @@ jobs:
           distribution: temurin
           java-version: 17.0.20+8
 
-      - name: Build, JVM tests, and merged-manifest checks
-        run: ./gradlew --no-daemon --stacktrace check assembleBaselineDebug assembleTarget37Debug assembleBaselineDebugAndroidTest
+      - name: Build, JVM tests, merged manifests, and release variants
+        run: ./gradlew --no-daemon --stacktrace check assembleBaselineDebug assembleTarget37Debug assembleBaselineDebugAndroidTest assembleBaselineRelease assembleTarget37Release
