@@ -89,8 +89,14 @@ class FakeHost(private val assets: AssetManager) : Closeable {
         val tlsCipherSuite: Int = 0,
         val extendedMasterSecret: Boolean = false,
         val resumedSession: Boolean = false,
-        val hostDerivedVerificationCode: String? = null,
-    )
+        private val deriveVerificationCode: () -> String? = { null },
+    ) {
+        /**
+         * Derived on first read, after the exchange: scrypt shares this emulator's CPU with the client, so
+         * running it before replying made a busy emulator miss the client's transport deadline.
+         */
+        val hostDerivedVerificationCode: String? by lazy(deriveVerificationCode)
+    }
 
     private val crypto = BcTlsCrypto(SecureRandom())
     private val certificateDer = assets.open("fake-host/cert.der").use(InputStream::readBytes)
@@ -151,7 +157,7 @@ class FakeHost(private val assets: AssetManager) : Closeable {
                 tlsCipherSuite = security.cipherSuite,
                 extendedMasterSecret = security.isExtendedMasterSecret,
                 resumedSession = security.isResumedSession,
-                hostDerivedVerificationCode = deriveVerificationCode(request.body),
+                deriveVerificationCode = { deriveVerificationCode(request.body) },
             )
             requests += recorded
             if (isInitialPairingRequest(request) && !bindingMatches(request, binding)) {
@@ -295,18 +301,25 @@ class FakeHost(private val assets: AssetManager) : Closeable {
         }.getOrDefault(false)
     }
 
-    /** The test host derives the comparison code separately from PairingCandidateFactory. */
+    private val derivedCodes = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * The test host derives the comparison code separately from PairingCandidateFactory. A nonce always
+     * yields the same code, so repeat reads reuse it.
+     */
     private fun deriveVerificationCode(body: String): String? = runCatching {
         val document = JSONObject(body)
         if (!document.has("verification_nonce")) return null
-        val nonce = Base64.getUrlDecoder().decode(document.getString("verification_nonce"))
+        val encodedNonce = document.getString("verification_nonce")
+        derivedCodes[encodedNonce]?.let { return it }
+        val nonce = Base64.getUrlDecoder().decode(encodedNonce)
         val salt = "steamos-companion:v1:pairing-sas:sha256:$certificateSha256".toByteArray(Charsets.US_ASCII)
         val derived = SCrypt.generate(nonce, salt, 16_384, 8, 1, 8)
         val number = BigInteger(1, derived).mod(BigInteger.valueOf(100_000_000L)).toLong()
         nonce.fill(0)
         salt.fill(0)
         derived.fill(0)
-        String.format(Locale.ROOT, "%08d", number)
+        String.format(Locale.ROOT, "%08d", number).also { derivedCodes[encodedNonce] = it }
     }.getOrNull()
 
     private fun readRequest(input: InputStream): Recorded {
