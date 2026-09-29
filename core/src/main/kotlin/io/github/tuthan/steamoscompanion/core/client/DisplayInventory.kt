@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.core.client
 
 import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
 import io.github.tuthan.steamoscompanion.core.protocol.DisplayOutputSummary
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 
 data class DisplaySelection(val outputId: String, val outputGeneration: Long, val modeId: String?)
@@ -25,6 +26,13 @@ object DisplayInventory {
         } ?: selected.currentModeId?.takeIf { current -> selected.modes.any { it.id == current } }
         return DisplaySelection(selected.id, selected.generation, selectedMode)
     }
+
+    /**
+     * The host appends a profile per successful save, so repeated saves of one mode pile up.
+     * Keeps the newest profile per output and resolution/refresh, newest first.
+     */
+    fun distinctProfiles(profiles: List<DisplayRecoveryProfile>): List<DisplayRecoveryProfile> =
+        profiles.asReversed().distinctBy { Triple(it.outputId, it.mode.width to it.mode.height, it.mode.refreshHz) }
 
     fun orderedModes(output: DisplayOutputSummary): List<DisplayModeSummary> = output.modes.sortedWith(
         compareByDescending<DisplayModeSummary> { it.id == output.currentModeId }

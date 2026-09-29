@@ -8,6 +8,7 @@ import io.github.tuthan.steamoscompanion.core.protocol.ProtocolCodec
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.protocol.OperationState
+import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.transport.RequestOutcome
 import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
@@ -196,6 +197,7 @@ class OperationJournal(
             }
             val updated = applyOutcome(old, remoteOutcome, now)
             val nextJournal = state.journal.toMutableList().also { it[index] = updated }
+                .withSupersededPreviewsSettled(now)
             val revokeCompleted = updated.path == ApiRoute.PAIR_REVOKE_SELF.path && updated.phase == JournalPhase.SUCCEEDED
             val active = state.activeHost
             val revocationTargetsActive = active != null && active.hostId == target.host.hostId &&
@@ -234,12 +236,19 @@ class OperationJournal(
         }
     }
 
-    /** Called before a recreated process exposes controls; empty recovery must not create state. */
+    /**
+     * Called before a recreated process exposes controls; empty recovery must not create state. It also
+     * closes preview entries that a confirmed Keep or a completed revert already ended, which older
+     * builds left unresolved.
+     */
     fun recoverPreparedEntries(): JournalUpdateResult {
         when (val loaded = repository.load()) {
             StateLoadResult.Empty -> return JournalUpdateResult.Saved
-            is StateLoadResult.Ready -> if (loaded.state.journal.none { it.phase == JournalPhase.PREPARED }) {
-                return JournalUpdateResult.Saved
+            is StateLoadResult.Ready -> {
+                val now = clock.wallTimeMillis().coerceAtLeast(0)
+                if (loaded.state.journal.none { it.phase == JournalPhase.PREPARED } &&
+                    loaded.state.journal.withSupersededPreviewsSettled(now) == loaded.state.journal
+                ) return JournalUpdateResult.Saved
             }
             is StateLoadResult.Unavailable -> return JournalUpdateResult.PersistenceUnavailable(loaded.reason)
             is StateLoadResult.Failed -> return JournalUpdateResult.PersistenceFailed(loaded.reason)
@@ -252,7 +261,7 @@ class OperationJournal(
                     updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
                     resultSummary = "Process ended before a result was saved; the earlier action may have run.",
                 ) else entry
-            })
+            }.withSupersededPreviewsSettled(now))
         }
     }
 
@@ -269,6 +278,8 @@ class OperationJournal(
         operationState: WireValue<OperationState>,
         outcome: String?,
         nowMillis: Long = clock.wallTimeMillis(),
+        /** The host reports it restored and verified the original mode for this preview (timeout or revert). */
+        hostRestored: Boolean = false,
     ): JournalUpdateResult = update { state ->
         if (!samePairing(state.activeHost, expectedHost)) {
             throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed during operation lookup")
@@ -280,16 +291,22 @@ class OperationJournal(
             old.originalCertificatePin != responseCertificatePin || old.operationId != operationId ||
             old.requestId != operationRequestId || old.expectedOperationKind() != operationKind
         ) throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Operation reply does not match the journal entry")
-        val phase = phaseFor(operationState)
+        // A preview that ran out of time is restored by the host, which leaves the operation open but
+        // reports the verified restore. Nothing is left to keep, so the entry is finished.
+        val timedOutAndRestored = hostRestored && old.path == ApiRoute.DISPLAY_PREVIEW.path && old.phase.unresolved &&
+            (operationState as? WireValue.Known)?.value?.let { it != OperationState.SUCCEEDED && it != OperationState.FAILED } == true
+        val phase = if (timedOutAndRestored) JournalPhase.SUCCEEDED else phaseFor(operationState)
         if (!canTransition(old.phase, phase)) throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Operation state moved backwards")
-        val summary = summary(operationState, outcome)
+        val summary = if (timedOutAndRestored) "succeeded: preview timed out; host restored the original mode"
+            else summary(operationState, outcome)
         val updated = old.copy(
             phase = phase,
             updatedAtMillis = nowMillis.coerceAtLeast(old.updatedAtMillis),
             resultSummary = summary,
             rejectionCode = operationFailureCode(phase, outcome),
         ).validated()
-        state.copy(journal = state.journal.toMutableList().also { it[index] = updated })
+        state.copy(journal = state.journal.toMutableList().also { it[index] = updated }
+            .withSupersededPreviewsSettled(nowMillis))
     }
 
     /** A 404/not-found lookup is unresolved and never authorizes replay. */
@@ -419,7 +436,11 @@ class OperationJournal(
         entry.path == ApiRoute.DISPLAY_SAVE_CURRENT.path && reply.status == 404 ->
             JournalRejectionCode.SAVE_CURRENT_UNSUPPORTED
         reply.error == "profile_not_found" -> JournalRejectionCode.PROFILE_NOT_FOUND
-        reply.error == "stale_target" -> JournalRejectionCode.STALE_TARGET
+        reply.error == "stale_target" || reply.error == "stale_display_target" ||
+            reply.error == "stale_display_inventory" -> JournalRejectionCode.STALE_TARGET
+        reply.error == "ambiguous_display_identity" -> JournalRejectionCode.AMBIGUOUS_DISPLAY
+        reply.error == "gamescope_output_unsupported" -> JournalRejectionCode.ORDER_UNSUPPORTED
+        reply.error == "gamescope_output_update_failed" -> JournalRejectionCode.ORDER_UPDATE_FAILED
         reply.error == "mutation_conflict" -> JournalRejectionCode.MUTATION_CONFLICT
         reply.error == "bridge_unavailable" -> JournalRejectionCode.BRIDGE_UNAVAILABLE
         reply.error == "readback_not_confirmed" -> JournalRejectionCode.READBACK_NOT_CONFIRMED
@@ -432,6 +453,7 @@ class OperationJournal(
     private fun operationFailureCode(phase: JournalPhase, outcome: String?): JournalRejectionCode? =
         if (phase != JournalPhase.FAILED) null
         else if (outcome == "readback_not_confirmed") JournalRejectionCode.READBACK_NOT_CONFIRMED
+        else if (outcome == "gamescope_output_configured_restart_failed") JournalRejectionCode.ORDER_SAVED_RESTART_FAILED
         else JournalRejectionCode.OPERATION_FAILED
 
     private fun phaseFor(state: WireValue<OperationState>): JournalPhase = when (state) {
@@ -493,3 +515,43 @@ class OperationJournal(
         )
     }
 }
+
+/**
+ * The host ends its preview when a Keep is confirmed or a preview revert completes, but it leaves the
+ * original preview operation open. Without this, that entry stays unresolved forever, keeps showing
+ * "Result not confirmed", and blocks every other display action. Only the host's own terminal success
+ * for the same credential, recorded after the preview, closes it.
+ */
+internal fun List<JournalEntry>.withSupersededPreviewsSettled(nowMillis: Long): List<JournalEntry> {
+    val closers = filter { it.phase == JournalPhase.SUCCEEDED && it.closesPreview() }
+    if (closers.isEmpty()) return this
+    return map { entry ->
+        if (entry.path != ApiRoute.DISPLAY_PREVIEW.path || !entry.phase.unresolved || entry.operationId == null) entry
+        else {
+            val closer = closers.firstOrNull { it.localGeneration > entry.localGeneration && it.sameCredential(entry) &&
+                (it.path == ApiRoute.DISPLAY_RESTORE.path || it.confirmedPreviewId() == entry.operationId) }
+            if (closer == null) entry else entry.copy(
+                phase = JournalPhase.SUCCEEDED,
+                updatedAtMillis = nowMillis.coerceAtLeast(entry.updatedAtMillis),
+                resultSummary = if (closer.path == ApiRoute.DISPLAY_CONFIRM.path) "succeeded: preview kept" else "succeeded: preview reverted",
+            )
+        }
+    }
+}
+
+private fun JournalEntry.closesPreview(): Boolean = when (path) {
+    ApiRoute.DISPLAY_CONFIRM.path -> true
+    ApiRoute.DISPLAY_RESTORE.path -> bodyString("source") == "preview"
+    else -> false
+}
+
+internal fun JournalEntry.confirmedPreviewId(): String? = bodyString("preview_id")
+
+private fun JournalEntry.bodyString(field: String): String? = try {
+    (BoundedJson.parseObject(bodyBytes())[field] as? JsonValue.StringValue)?.value
+} catch (_: Exception) { null }
+
+private fun JournalEntry.sameCredential(other: JournalEntry): Boolean =
+    hostId == other.hostId && clientId == other.clientId && originalEndpoint == other.originalEndpoint &&
+        originalCertificatePin == other.originalCertificatePin && originalPairedAtMillis == other.originalPairedAtMillis &&
+        originalBearerSha256 != null && originalBearerSha256 == other.originalBearerSha256

@@ -70,8 +70,10 @@ class EncryptedStateRepository(
     /** Cache only a host-read exact recovery target for the same active credential. */
     fun recordRecoveryProfiles(expectedHost: ActiveHost, profiles: List<DisplayRecoveryProfile>): StateCommitResult {
         // The host keeps all verified profiles, while encrypted offline state is bounded.
-        // New profiles are appended to the host inventory, so retain its latest entries.
-        val snapshot = profiles.takeLast(PersistentStateLimits.MAX_CACHED_RECOVERY_PROFILES)
+        // New profiles are appended to the host inventory, so retain the latest distinct entries,
+        // stored oldest first like the host list.
+        val snapshot = DisplayInventory.distinctProfiles(profiles)
+            .take(PersistentStateLimits.MAX_CACHED_RECOVERY_PROFILES).asReversed()
         try { expectedHost.copy(cachedRecoveryProfiles = snapshot).validated() }
         catch (_: IllegalArgumentException) { return StateCommitResult.Rejected(StateInvariantCode.INVALID_FIELD) }
         val loaded = load()

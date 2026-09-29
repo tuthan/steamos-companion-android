@@ -73,6 +73,8 @@ object ProtocolCodec {
             updatedAt = bounded(value["updated_at"].asString("operation.updated_at"), "operation.updated_at", 64),
             outcome = value["outcome"].nullableString("operation.outcome", 128),
             reason = value["reason"].nullableString("operation.reason", 256),
+            restoreState = value["restore_state"].nullableString("operation.restore_state", 64),
+            restored = value["restored"].nullableBoolean("operation.restored"),
         )
     }
 
@@ -302,18 +304,22 @@ object ProtocolCodec {
         }
         val outputs = value["outputs"].asArray("display_order.outputs")
         if (outputs.size > 16) throw JsonFormatException("Too many display-order outputs")
-        outputs.forEachIndexed { index, outputValue ->
+        val records = outputs.mapIndexed { index, outputValue ->
             val output = outputValue.asObject("display_order.outputs[$index]")
-            bounded(output["output_key"].asString("output_key"), "output_key", 128)
-            output["display_name"].nullableString("display_name", 256)
-            output["connector"].nullableString("connector", 128)
-            if (output["connected"] !is JsonValue.BooleanValue) throw JsonFormatException("'connected' must be boolean")
-            output["active"].nullableBoolean("active")
+            DisplayOrderOutput(
+                bounded(output["output_key"].asString("output_key"), "output_key", 128),
+                output["display_name"].nullableString("display_name", 256),
+                output["connector"].nullableString("connector", 128),
+                (output["connected"] as? JsonValue.BooleanValue)?.value
+                    ?: throw JsonFormatException("'connected' must be boolean"),
+                output["active"].nullableBoolean("active"),
+            )
         }
         if (available && generation == null) throw JsonFormatException("Available display order needs a generation")
         return DisplayOrderSummary(
             available, generation, outputKeys, savedKeys,
             bool("restart_required"), bool("restart_available"), bool("unsupported"), bool("stale"), bool("ambiguous"),
+            records,
         )
     }
 

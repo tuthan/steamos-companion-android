@@ -16,6 +16,7 @@ import io.github.tuthan.steamoscompanion.core.client.JournalDispatchResult
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.JournalRejectionCode
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
+import io.github.tuthan.steamoscompanion.core.client.OrderRestartConfirmation
 import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.client.StatusPollState
 import java.util.concurrent.Executors
@@ -52,11 +53,24 @@ class DisplayActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         runtime.displayDispatcher.keepPreview(host, observation, confirmation, runtime.mutationSender)
     }
 
-    private fun execute(action: () -> DisplayDispatchResult) {
+    fun saveOrder(host: ActiveHost, observation: StatusPollState, keys: List<String>, generation: Long) = execute(
+        completed = "Order saved for the next Gaming Mode session",
+    ) { runtime.displayDispatcher.saveOrder(host, observation, keys, generation, runtime.mutationSender) }
+
+    fun saveOrderAndRestart(host: ActiveHost, observation: StatusPollState, confirmation: OrderRestartConfirmation) =
+        execute(completed = "Order saved; Gaming Mode restart requested. Reconnect and check the display") {
+            runtime.displayDispatcher.saveOrderAndRestart(host, observation, confirmation, runtime.mutationSender)
+        }
+
+    fun resetOrder(host: ActiveHost, observation: StatusPollState) = execute(
+        completed = "Automatic display order restored for the next Gaming Mode session",
+    ) { runtime.displayDispatcher.resetOrder(host, observation, runtime.mutationSender) }
+
+    private fun execute(completed: String? = null, action: () -> DisplayDispatchResult) {
         if (busy) return
         busy = true
         worker.execute {
-            val result = try { action().message() } catch (_: RuntimeException) {
+            val result = try { action().message(completed) } catch (_: RuntimeException) {
                 "Could not send the display request" to StatusTone.WARNING
             }
             main.post {
@@ -66,7 +80,7 @@ class DisplayActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         }
     }
 
-    private fun DisplayDispatchResult.message(): Pair<String, StatusTone> = when (this) {
+    private fun DisplayDispatchResult.message(completed: String?): Pair<String, StatusTone> = when (this) {
         is DisplayDispatchResult.Blocked -> when (reason) {
             DisplayBlock.STALE_SELECTION -> "Display changed; choose the output and mode again" to StatusTone.WARNING
             DisplayBlock.PROFILE_MISSING -> "Saved recovery mode is no longer available" to StatusTone.WARNING
@@ -78,12 +92,16 @@ class DisplayActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
             DisplayBlock.PAIRING_CHANGED, DisplayBlock.OBSERVATION_PAIRING_CHANGED,
             DisplayBlock.CONFIRMATION_MISMATCH -> "Device identity or display changed; check it again" to StatusTone.WARNING
             DisplayBlock.STATUS_NOT_FRESH -> "Check the latest display status before sending" to StatusTone.WARNING
+            DisplayBlock.ORDER_UNAVAILABLE -> "Display order is unavailable on this host" to StatusTone.WARNING
+            DisplayBlock.ORDER_NOT_EDITABLE -> "The host does not allow changing the display order right now" to StatusTone.WARNING
+            DisplayBlock.RESTART_UNAVAILABLE -> "This host cannot restart Gaming Mode from here" to StatusTone.WARNING
+            DisplayBlock.RESTART_NOT_CONFIRMED -> "Confirm the Gaming Mode restart first" to StatusTone.WARNING
             else -> "Display action unavailable in the current state" to StatusTone.WARNING
         }
         is DisplayDispatchResult.Dispatched -> when (val outcome = result) {
             is JournalDispatchResult.Finished -> when (outcome.entry.phase) {
                 JournalPhase.FAILED -> failure(outcome.entry.rejectionCode) to StatusTone.WARNING
-                JournalPhase.SUCCEEDED -> "Host reported completion; checking the current display" to StatusTone.GOOD
+                JournalPhase.SUCCEEDED -> (completed ?: "Host reported completion; checking the current display") to StatusTone.GOOD
                 else -> "Request recorded; checking the operation and display" to StatusTone.UNKNOWN
             }
             is JournalDispatchResult.ResultNotConfirmed -> "Result not confirmed; check the original operation" to StatusTone.WARNING
@@ -115,6 +133,11 @@ fun failure(code: JournalRejectionCode?): String = when (code) {
     JournalRejectionCode.PREVIEW_NOT_FOUND -> "Preview is no longer available"
     JournalRejectionCode.PREVIEW_EXPIRED -> "Preview time ended; checking restoration"
     JournalRejectionCode.FORBIDDEN -> "Display control permission was rejected"
+    JournalRejectionCode.AMBIGUOUS_DISPLAY -> "The host cannot tell two displays apart, so the order can't be changed"
+    JournalRejectionCode.ORDER_UNSUPPORTED -> "This host's Gaming Mode setup does not support changing the display order"
+    JournalRejectionCode.ORDER_UPDATE_FAILED -> "The host could not update the display order"
+    JournalRejectionCode.ORDER_SAVED_RESTART_FAILED ->
+        "The order is saved, but Gaming Mode did not restart. It applies at the next session"
     JournalRejectionCode.OPERATION_FAILED, JournalRejectionCode.OTHER_REJECTION, null ->
         "Host did not confirm the display request"
 }

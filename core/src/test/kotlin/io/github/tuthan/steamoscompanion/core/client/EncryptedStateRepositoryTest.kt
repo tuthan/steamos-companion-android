@@ -21,12 +21,26 @@ class EncryptedStateRepositoryTest {
         assertTrue(repository.transact { it.copy(activeHost = host) } is StateCommitResult.Saved)
         val profiles = (1..12).map { index ->
             DisplayRecoveryProfile("profile-$index", "HDMI-A-1",
-                DisplayModeSummary("mode-$index", 1920, 1080, "60"))
+                DisplayModeSummary("mode-$index", 1000L + index, 1080, "60"))
         }
 
         assertTrue(repository.recordRecoveryProfiles(host, profiles) is StateCommitResult.Saved)
         val cached = (repository.load() as StateLoadResult.Ready).state.activeHost!!.cachedRecoveryProfiles
         assertEquals(profiles.takeLast(PersistentStateLimits.MAX_CACHED_RECOVERY_PROFILES), cached)
+    }
+
+    @Test
+    fun repeatedSavesOfOneResolutionCacheOnlyTheNewestEntry() {
+        val repository = EncryptedStateRepository(MemoryStateStore(), JvmAesGcmStateCipher())
+        val host = testActiveHost()
+        assertTrue(repository.transact { it.copy(activeHost = host) } is StateCommitResult.Saved)
+        val profiles = (1..12).map { index ->
+            DisplayRecoveryProfile("profile-$index", "HDMI-A-1", DisplayModeSummary("mode-$index", 1920, 1080, "60"))
+        }
+
+        assertTrue(repository.recordRecoveryProfiles(host, profiles) is StateCommitResult.Saved)
+        val cached = (repository.load() as StateLoadResult.Ready).state.activeHost!!.cachedRecoveryProfiles
+        assertEquals(listOf(profiles.last()), cached)
     }
 
     @Test

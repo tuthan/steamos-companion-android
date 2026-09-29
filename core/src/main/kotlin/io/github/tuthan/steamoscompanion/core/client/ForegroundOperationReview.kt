@@ -1,5 +1,6 @@
 package io.github.tuthan.steamoscompanion.core.client
 
+import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import java.io.Closeable
 import java.util.concurrent.Executors
@@ -20,6 +21,8 @@ class ForegroundOperationReview(
     private var signal: CancellationSignal? = null
     private var running: Future<*>? = null
     private var closed = false
+    private var lastEndedPreviewSweep = Long.MIN_VALUE / 2
+    private val endedPreviewAttempts = HashMap<Long, Int>()
 
     fun start() {
         synchronized(lock) {
@@ -42,6 +45,37 @@ class ForegroundOperationReview(
         }
     }
 
+    /**
+     * The host's preview is gone but its operation is still open: ask the host once every few
+     * seconds, a bounded number of times per entry, whether it restored the original mode.
+     * Read-only GETs; nothing is replayed, and it stops when the entry settles or the cap is hit.
+     */
+    fun reviewEndedPreviews(nowNanos: Long) {
+        synchronized(lock) {
+            val cancellation = signal ?: return
+            if (closed || running?.isDone == false || nowNanos - lastEndedPreviewSweep < ENDED_PREVIEW_INTERVAL_NANOS) return
+            lastEndedPreviewSweep = nowNanos
+            val cycle = generation
+            running = worker.submit { sweepEndedPreviews(cycle, cancellation) }
+        }
+    }
+
+    private fun sweepEndedPreviews(cycle: Long, cancellation: CancellationSignal) {
+        val entries = (repository.load() as? StateLoadResult.Ready)?.state?.journal.orEmpty()
+            .filter { it.phase.unresolved && it.operationId != null && it.path == ApiRoute.DISPLAY_PREVIEW.path &&
+                it.belongsTo(host) }
+            .map { it.localGeneration }
+            .filter { synchronized(lock) { endedPreviewAttempts.merge(it, 1, Int::plus)!! } <= MAX_ENDED_PREVIEW_ATTEMPTS }
+        for (localGeneration in entries) {
+            if (cancellation.isCancelled) return
+            val result = reconciler.reconcile(host, localGeneration, cancellation)
+            if (cancellation.isCancelled) return
+            synchronized(lock) {
+                if (!closed && signal === cancellation && generation == cycle) listener(localGeneration, result)
+            }
+        }
+    }
+
     private fun sweep(cycle: Long, cancellation: CancellationSignal) {
         val entries = (repository.load() as? StateLoadResult.Ready)?.state?.journal.orEmpty()
             .filter { it.phase.unresolved && it.operationId != null && it.belongsTo(host) }
@@ -54,6 +88,11 @@ class ForegroundOperationReview(
                 if (!closed && signal === cancellation && generation == cycle) listener(localGeneration, result)
             }
         }
+    }
+
+    private companion object {
+        const val ENDED_PREVIEW_INTERVAL_NANOS = 4_000_000_000L
+        const val MAX_ENDED_PREVIEW_ATTEMPTS = 6
     }
 
     override fun close() {

@@ -378,6 +378,35 @@ class OperationJournalTest {
     }
 
     @Test
+    fun displayOrderHostRefusalsMapToTypedReasonsThatSurviveReload() {
+        val (_, _, repository, journal) = fixture()
+        val host = testActiveHost()
+        repository.transact { it.copy(activeHost = host) }
+        val replies = listOf(
+            "stale_display_inventory" to JournalRejectionCode.STALE_TARGET,
+            "stale_display_target" to JournalRejectionCode.STALE_TARGET,
+            "ambiguous_display_identity" to JournalRejectionCode.AMBIGUOUS_DISPLAY,
+            "gamescope_output_unsupported" to JournalRejectionCode.ORDER_UNSUPPORTED,
+            "gamescope_output_update_failed" to JournalRejectionCode.ORDER_UPDATE_FAILED,
+            "mutation_conflict" to JournalRejectionCode.MUTATION_CONFLICT,
+        )
+        replies.forEachIndexed { index, (error, expected) ->
+            val request = ApiRequest(HttpMethod.POST, ApiRoute.DISPLAY_ORDER_SET.path,
+                jsonObject("request_id" to JsonValue.StringValue("order-rejected-$index"),
+                    "output_keys" to JsonValue.ArrayValue(listOf(JsonValue.StringValue("drm:card0:DP-1"))),
+                    "generation" to JsonValue.NumberValue("1"),
+                    "restart" to JsonValue.BooleanValue(false)), host.bearerToken)
+            val result = journal.dispatchForHost(host, request) { _, _, _ ->
+                RequestOutcome.Rejected(ApiReply.Rejected(409, error, "host detail"), null)
+            } as JournalDispatchResult.Finished
+            assertEquals(expected, result.entry.rejectionCode)
+            val reloaded = (repository.load() as StateLoadResult.Ready).state.journal
+                .first { it.localGeneration == result.entry.localGeneration }
+            assertEquals(expected, reloaded.rejectionCode)
+        }
+    }
+
+    @Test
     fun delayedDisplayOperationFailureRetainsTypedReadbackReason() {
         val (_, _, repository, journal) = fixture()
         val host = testActiveHost()

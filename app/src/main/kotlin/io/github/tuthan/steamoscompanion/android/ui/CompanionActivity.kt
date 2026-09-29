@@ -57,9 +57,13 @@ import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPrompt
 import io.github.tuthan.steamoscompanion.core.pairing.PairingAction
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
+import io.github.tuthan.steamoscompanion.core.client.DisplayInventory
 import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
+import io.github.tuthan.steamoscompanion.core.client.PendingDisplayResult
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
 import io.github.tuthan.steamoscompanion.core.client.OperationLanePresentation
+import io.github.tuthan.steamoscompanion.core.client.OrderRestartConfirmation
+import io.github.tuthan.steamoscompanion.core.client.DisplayOrderPresentation
 import io.github.tuthan.steamoscompanion.core.client.PreviewPresentation
 import io.github.tuthan.steamoscompanion.core.client.StateLoadResult
 import io.github.tuthan.steamoscompanion.core.client.StatusObservationSource
@@ -166,6 +170,17 @@ class CompanionActivity : ComponentActivity() {
                         pairedSession?.refresh()
                     }
                 }
+                // A preview that timed out is restored by the host; ask it (bounded) instead of waiting for a tap.
+                LaunchedEffect(status.lastSuccessMonotonicNanos, persisted) {
+                    val current = host
+                    val saved = persisted
+                    val pending = if (current != null && saved != null) {
+                        DisplayRecoveryPresentation.project(current, saved, status, runtime.clock.monotonicNanos())
+                    } else null
+                    if (pending is PreviewPresentation.Pending && pending.result == PendingDisplayResult.CHECKING_PREVIEW) {
+                        pairedSession?.reviewEndedPreview()
+                    }
+                }
                 LaunchedEffect(phase10.feedback?.revision) {
                     if (phase10.feedback != null) reloadPersistentState()
                 }
@@ -201,6 +216,11 @@ class CompanionActivity : ComponentActivity() {
                     onRevert = { host?.let { displayActions.revert(it, status) } },
                     onKeep = { confirmation -> host?.let { displayActions.keep(it, status, confirmation) } },
                     onSaveCurrent = { confirmation -> host?.let { displayActions.saveCurrent(it, status, confirmation) } },
+                    onSaveOrder = { keys, generation -> host?.let { displayActions.saveOrder(it, status, keys, generation) } },
+                    onSaveOrderAndRestart = { confirmation ->
+                        host?.let { displayActions.saveOrderAndRestart(it, status, confirmation) }
+                    },
+                    onResetOrder = { host?.let { displayActions.resetOrder(it, status) } },
                     onPairAnother = { navigation.navigate(UiDestination.ONBOARDING) },
                     onConfirmReplacement = { expected, generation -> phase10.confirmReplacement(expected, generation) },
                     onDiscardReplacement = { generation -> phase10.discardReplacement(generation) },
@@ -312,6 +332,9 @@ private fun CompanionRoot(
     onRevert: () -> Unit,
     onKeep: (KeepPreviewConfirmation) -> Unit,
     onSaveCurrent: (SaveCurrentConfirmation) -> Unit,
+    onSaveOrder: (List<String>, Long) -> Unit,
+    onSaveOrderAndRestart: (OrderRestartConfirmation) -> Unit,
+    onResetOrder: () -> Unit,
     onPairAnother: () -> Unit,
     onConfirmReplacement: (ActiveHost, Long) -> Unit,
     onDiscardReplacement: (Long) -> Unit,
@@ -368,10 +391,11 @@ private fun CompanionRoot(
                         displayBusy, onNavigate, onRestore, onRevert, onKeep, onCheckStatus,
                         onCheckOperation)
                 }
-                UiDestination.DISPLAY -> if (host != null) DisplayScreen(
+                UiDestination.DISPLAY, UiDestination.DISPLAY_ORDER -> if (host != null) DisplayScreen(
                     persisted?.activeHost ?: host, persisted, status, runtime.clock.monotonicNanos(),
                     displayBusy, displayFeedback, onPreview, onRestore, onRevert, onKeep, onSaveCurrent,
-                    onCheckOperation)
+                    onSaveOrder, onSaveOrderAndRestart, onResetOrder, onCheckOperation,
+                    startOnOrder = destination == UiDestination.DISPLAY_ORDER)
                 UiDestination.POWER -> if (host != null) PowerScreen(host,
                     runtime.aliasStore.get(host) ?: host.endpoint, actionContext(host, persisted, status),
                     persisted, status, runtime.clock.monotonicNanos(), busy, feedback,
@@ -511,7 +535,7 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
         }
         PreviewPresentation.None -> Kicker(stringResource(R.string.ui_recovery))
     }
-    val profile = host.cachedRecoveryProfiles?.firstOrNull()
+    val profile = host.cachedRecoveryProfiles?.let(DisplayInventory::distinctProfiles)?.firstOrNull()
     ActionRow(stringResource(R.string.ui_restore_saved_display),
         secondary = profile?.mode?.let { "${it.width} × ${it.height} · ${it.refreshHz ?: "?"} Hz" },
         enabled = profile != null && !busy && (recovery == PreviewPresentation.None ||
@@ -530,6 +554,13 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
     ActionRow("Check device status", icon = R.drawable.ic_radar, onClick = onCheckStatus)
     ActionRow(stringResource(R.string.ui_display_settings), icon = R.drawable.ic_list, navigates = true,
         onClick = { onNavigate(UiDestination.DISPLAY) })
+    if (DisplayOrderPresentation.offered(status.lastRead?.takeIf { status.source == StatusObservationSource.from(host) }
+            ?.order?.snapshot)) {
+        ActionRow(stringResource(R.string.ui_display_order), icon = R.drawable.ic_list, navigates = true,
+            enabled = recovery == PreviewPresentation.None,
+            reason = recoveryBlockReason,
+            onClick = { onNavigate(UiDestination.DISPLAY_ORDER) })
+    }
     ActionRow(stringResource(R.string.ui_power_options), icon = R.drawable.ic_play, navigates = true,
         secondary = "Suspend, restart, shut down",
         enabled = recovery == PreviewPresentation.None,

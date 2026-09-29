@@ -5,7 +5,9 @@ import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 
-enum class DisplayOperationKind { PREVIEW, KEEP, REVERT_PREVIEW, RESTORE_SAVED, SAVE_CURRENT }
+enum class DisplayOperationKind {
+    PREVIEW, KEEP, REVERT_PREVIEW, RESTORE_SAVED, SAVE_CURRENT, ORDER_SAVE, ORDER_SAVE_AND_RESTART, ORDER_RESET,
+}
 
 /** A current host fact. None of these values asserts that the journaled action caused it. */
 enum class DisplayObservation {
@@ -13,6 +15,9 @@ enum class DisplayObservation {
     PREVIEW_ACTIVE, PREVIEW_DIFFERENT, PREVIEW_ABSENT,
     OUTPUT_MISSING, OUTPUT_REENUMERATED, PROFILE_NOT_LISTED,
     MODE_MATCHES_REQUEST, MODE_DIFFERS_FROM_REQUEST, DISPLAY_REACHABLE,
+    /** Order readback only: the host's saved order equals, differs from, or is cleared relative to the request. */
+    ORDER_UNAVAILABLE, ORDER_SAVED_MATCHES_REQUEST, ORDER_SAVED_DIFFERS_FROM_REQUEST,
+    ORDER_AUTOMATIC, ORDER_STILL_SAVED,
 }
 
 data class DisplayOperationCard(
@@ -23,6 +28,8 @@ data class DisplayOperationCard(
     val failure: JournalRejectionCode?,
     val observed: DisplayObservation,
     val pairingProven: Boolean,
+    /** For order saves: the exact keys that were submitted, so a draft can wait for host readback. */
+    val requestedKeys: List<String>? = null,
 )
 
 /** Rebuilds the latest display operation card from durable journal and an independent status read. */
@@ -49,11 +56,12 @@ object DisplayOperationPresentation {
                 if (read == null || read.status.hostId != active.hostId || observation.stale ||
                     age == null || age !in 0..FRESH_NANOS
                 ) DisplayObservation.NOT_CHECKED
+                else if (kind.isOrder) orderObservation(entry, kind, read.order?.snapshot)
                 else observedFor(entry, kind, read.outputs)
             }
         }
         return DisplayOperationCard(entry.localGeneration, kind, entry.phase, entry.operationId,
-            entry.rejectionCode, observed, proven)
+            entry.rejectionCode, observed, proven, requestedKeys(entry, kind))
     }
 
     private fun observedFor(
@@ -86,7 +94,33 @@ object DisplayOperationPresentation {
             }
             DisplayOperationKind.SAVE_CURRENT -> outputObservation(outputs, string(body["output_id"]),
                 number(body["generation"]))
+            DisplayOperationKind.ORDER_SAVE, DisplayOperationKind.ORDER_SAVE_AND_RESTART,
+            DisplayOperationKind.ORDER_RESET -> DisplayObservation.OUTPUTS_UNAVAILABLE
         }
+    }
+
+    private fun requestedKeys(entry: JournalEntry, kind: DisplayOperationKind): List<String>? =
+        if (kind != DisplayOperationKind.ORDER_SAVE && kind != DisplayOperationKind.ORDER_SAVE_AND_RESTART) null
+        else (BoundedJson.parseObject(entry.bodyBytes())["output_keys"] as? JsonValue.ArrayValue)
+            ?.values?.mapNotNull { string(it) }
+
+    /** Compares only the host's saved order; it never claims the restart happened. */
+    private fun orderObservation(
+        entry: JournalEntry,
+        kind: DisplayOperationKind,
+        order: io.github.tuthan.steamoscompanion.core.protocol.DisplayOrderSummary?,
+    ): DisplayObservation {
+        if (order == null || order.unsupported || !order.available && order.savedOutputKeys.isEmpty()) {
+            return DisplayObservation.ORDER_UNAVAILABLE
+        }
+        if (kind == DisplayOperationKind.ORDER_RESET) {
+            return if (order.savedOutputKeys.isEmpty()) DisplayObservation.ORDER_AUTOMATIC
+            else DisplayObservation.ORDER_STILL_SAVED
+        }
+        val requested = (BoundedJson.parseObject(entry.bodyBytes())["output_keys"] as? JsonValue.ArrayValue)
+            ?.values?.mapNotNull { string(it) }.orEmpty()
+        return if (order.savedOutputKeys == requested) DisplayObservation.ORDER_SAVED_MATCHES_REQUEST
+        else DisplayObservation.ORDER_SAVED_DIFFERS_FROM_REQUEST
     }
 
     private fun modeObservation(
@@ -120,8 +154,15 @@ object DisplayOperationPresentation {
             "verified" -> DisplayOperationKind.RESTORE_SAVED
             else -> null
         }
+        ApiRoute.DISPLAY_ORDER_SET.path -> if ((BoundedJson.parseObject(entry.bodyBytes())["restart"] as?
+                JsonValue.BooleanValue)?.value == true) DisplayOperationKind.ORDER_SAVE_AND_RESTART
+            else DisplayOperationKind.ORDER_SAVE
+        ApiRoute.DISPLAY_ORDER_AUTOMATIC.path -> DisplayOperationKind.ORDER_RESET
         else -> null
     }
+
+    private val DisplayOperationKind.isOrder: Boolean get() = this == DisplayOperationKind.ORDER_SAVE ||
+        this == DisplayOperationKind.ORDER_SAVE_AND_RESTART || this == DisplayOperationKind.ORDER_RESET
 
     private fun string(value: JsonValue?): String? = (value as? JsonValue.StringValue)?.value
     private fun number(value: JsonValue?): Long? = (value as? JsonValue.NumberValue)?.lexical?.toLongOrNull()

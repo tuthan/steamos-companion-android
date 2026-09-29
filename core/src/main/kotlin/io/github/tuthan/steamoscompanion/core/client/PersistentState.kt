@@ -296,6 +296,13 @@ enum class JournalRejectionCode(val wireValue: String) {
     PREVIEW_EXPIRED("preview_expired"),
     FORBIDDEN("forbidden"),
     OPERATION_FAILED("operation_failed"),
+    /** Display order: a connector on the host is ambiguous, so the host refused to target it. */
+    AMBIGUOUS_DISPLAY("ambiguous_display_identity"),
+    /** Display order: this host's gamescope-session format cannot be changed safely. */
+    ORDER_UNSUPPORTED("gamescope_output_unsupported"),
+    ORDER_UPDATE_FAILED("gamescope_output_update_failed"),
+    /** Display order: the order is saved on the host, but the requested Gaming Mode restart failed. */
+    ORDER_SAVED_RESTART_FAILED("order_saved_restart_failed"),
     OTHER_REJECTION("other_rejection"),
 }
 

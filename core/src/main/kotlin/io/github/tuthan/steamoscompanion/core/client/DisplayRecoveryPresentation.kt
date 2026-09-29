@@ -61,7 +61,12 @@ object DisplayRecoveryPresentation {
             observation.source == StatusObservationSource.from(active) && it.status.hostId == active.hostId
         }
         val preview = read?.outputs?.takeIf { it.available && !it.legacyShape }?.preview
-        if (preview != null) {
+        // The host confirmed this Keep and clears the preview; until the next read drops it, offer nothing.
+        val alreadyKept = preview != null && entries.any {
+            it.path == ApiRoute.DISPLAY_CONFIRM.path && it.phase == JournalPhase.SUCCEEDED &&
+                it.confirmedPreviewId() == preview.id
+        }
+        if (preview != null && !alreadyKept) {
             val owned = entries.any { it.path == ApiRoute.DISPLAY_PREVIEW.path && it.operationId == preview.id }
             val conflicting = possibleConflicts.any { it.phase.unresolved &&
                 !(it.belongsTo(active) && it.path == ApiRoute.DISPLAY_PREVIEW.path && it.operationId == preview.id) }

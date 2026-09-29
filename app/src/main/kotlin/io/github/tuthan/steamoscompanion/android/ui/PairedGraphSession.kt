@@ -143,6 +143,12 @@ class PairedGraphSession(
         operations.start()
     }
 
+    /** A preview vanished from the host but its operation is still open; see if the host restored it. */
+    fun reviewEndedPreview() {
+        requireMainThread()
+        if (started && !closed) operations.reviewEndedPreviews(clock.monotonicNanos())
+    }
+
     override fun close() {
         requireMainThread()
         if (closed) return

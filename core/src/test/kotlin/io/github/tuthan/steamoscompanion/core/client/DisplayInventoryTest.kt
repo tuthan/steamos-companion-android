@@ -3,6 +3,8 @@ package io.github.tuthan.steamoscompanion.core.client
 import io.github.tuthan.steamoscompanion.core.protocol.ApiReply
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
 import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayRecoveryProfile
 import io.github.tuthan.steamoscompanion.core.protocol.HttpResponse
 import io.github.tuthan.steamoscompanion.core.protocol.ProtocolCodec
 import io.github.tuthan.steamoscompanion.core.protocol.ProtocolFixtureAssertions
@@ -42,6 +44,17 @@ class DisplayInventoryTest {
         assertEquals(DisplaySelection("1", 4, "2"), DisplayInventory.select(inventory, DisplaySelection("1", 4, "2")))
         assertEquals(DisplaySelection("1", 4, "3352"), DisplayInventory.select(inventory, DisplaySelection("1", 3, "2")))
         assertFalse(DisplayInventory.sameInventory(inventory, inventory.copy(generation = 5)))
+    }
+
+    @Test fun distinctProfilesKeepNewestPerOutputAndResolutionNewestFirst() {
+        fun profile(id: String, output: String, width: Long, hz: String?) =
+            DisplayRecoveryProfile(id, output, DisplayModeSummary("m$id", width, width * 9 / 16, hz))
+        val host = listOf(
+            profile("a", "1", 1920, "60"), profile("b", "1", 1280, "60"), profile("c", "1", 1920, "60"),
+            profile("d", "2", 1920, "60"), profile("e", "1", 1920, "144"), profile("f", "1", 1920, "60"),
+        )
+        assertEquals(listOf("f", "e", "d", "b"), DisplayInventory.distinctProfiles(host).map { it.id })
+        assertEquals(emptyList<DisplayRecoveryProfile>(), DisplayInventory.distinctProfiles(emptyList()))
     }
 
     private fun fixture(name: String): VersionedPayload.DisplayOutputs {

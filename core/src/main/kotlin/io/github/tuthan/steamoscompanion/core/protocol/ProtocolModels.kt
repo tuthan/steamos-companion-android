@@ -231,7 +231,7 @@ data class ApiRequest(
                     positiveInt("generation")
                     bool("restart")
                     val keys = fields["output_keys"].asArray("output_keys")
-                    if (keys.isEmpty() || keys.size > 8) throw RequestValidationException("Invalid output_keys")
+                    if (keys.isEmpty() || keys.size > 16) throw RequestValidationException("Invalid output_keys")
                     val parsed = keys.map { it.asString("output_key") }
                     if (parsed.distinct().size != parsed.size || parsed.any { !Regex("[A-Za-z0-9][A-Za-z0-9_.:|/-]{0,127}").matches(it) }) {
                         throw RequestValidationException("Invalid or duplicate output key")
@@ -384,6 +384,15 @@ data class DisplayOrderSummary(
     val unsupported: Boolean,
     val stale: Boolean,
     val ambiguous: Boolean,
+    val outputs: List<DisplayOrderOutput> = emptyList(),
+)
+
+data class DisplayOrderOutput(
+    val key: String,
+    val displayName: String?,
+    val connector: String?,
+    val connected: Boolean,
+    val active: Boolean?,
 )
 
 enum class PairingState { PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED }
@@ -406,7 +415,14 @@ data class OperationSummary(
     val updatedAt: String,
     val outcome: String?,
     val reason: String?,
-)
+    /** Host fact on a display preview: restore progress, e.g. "succeeded" after a timeout revert. */
+    val restoreState: String? = null,
+    /** Host fact: the original mode was restored and read back. */
+    val restored: Boolean? = null,
+) {
+    /** The host itself restored and verified the original mode (timeout or revert). */
+    val hostRestored: Boolean get() = restoreState == "succeeded" && restored == true
+}
 
 enum class OperationState { ACCEPTED, DISPATCHED, OBSERVED_RETURN, SUCCEEDED, FAILED, UNKNOWN }
 

@@ -3,6 +3,7 @@ package io.github.tuthan.steamoscompanion.core.client
 import io.github.tuthan.steamoscompanion.core.ports.Clock
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRequest
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
+import io.github.tuthan.steamoscompanion.core.protocol.DisplayOrderSummary
 import io.github.tuthan.steamoscompanion.core.protocol.DisplayOutputSummary
 import io.github.tuthan.steamoscompanion.core.protocol.DisplayPreviewSummary
 import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
@@ -54,7 +55,18 @@ data class KeepPreviewConfirmation(
             deadlineSeconds == preview.deadlineSeconds
 }
 
+/**
+ * Captured when the Save-and-restart sheet opens; pass only after the owner confirms that the
+ * remote Steam UI, games and stream will close. It binds the exact keys and host generation.
+ */
+data class OrderRestartConfirmation(
+    val target: StatusObservationSource,
+    val outputKeys: List<String>,
+    val generation: Long,
+)
+
 enum class DisplayBlock {
+    ORDER_UNAVAILABLE, ORDER_NOT_EDITABLE, RESTART_UNAVAILABLE, RESTART_NOT_CONFIRMED,
     PAIRING_CHANGED, STORE_UNAVAILABLE, MISSING_SCOPE, STATUS_NOT_FRESH,
     OUTPUTS_UNAVAILABLE, STALE_SELECTION, MODE_ALREADY_CURRENT, PREVIEW_ACTIVE,
     PREVIEW_NOT_OWNED, PREVIEW_DEADLINE_UNKNOWN, PREVIEW_ENDED,
@@ -155,6 +167,56 @@ class DisplayDispatcher(
             "preview_id" to string(preview.id), "visible" to JsonValue.BooleanValue(true))
     }
 
+    /** Save the draft for the next Gaming Mode session. No restart is requested. */
+    fun saveOrder(
+        host: ActiveHost, observation: StatusPollState, outputKeys: List<String>, generation: Long,
+        sender: JournalMutationSender,
+    ): DisplayDispatchResult = dispatchOrder(host, observation, outputKeys, generation, restart = false, sender)
+
+    /** Save, then let the host request the fixed Gaming Mode restart. Never resent after an unknown result. */
+    fun saveOrderAndRestart(
+        host: ActiveHost, observation: StatusPollState, confirmation: OrderRestartConfirmation?,
+        sender: JournalMutationSender,
+    ): DisplayDispatchResult {
+        if (confirmation == null) return blocked(DisplayBlock.RESTART_NOT_CONFIRMED)
+        if (confirmation.target != StatusObservationSource.from(host)) return blocked(DisplayBlock.CONFIRMATION_MISMATCH)
+        return dispatchOrder(host, observation, confirmation.outputKeys, confirmation.generation, restart = true, sender)
+    }
+
+    /** Explicit host operation that removes only the plugin-owned order configuration. */
+    fun resetOrder(host: ActiveHost, observation: StatusPollState, sender: JournalMutationSender): DisplayDispatchResult {
+        val checked = context(host, observation, requireFresh = true)
+        val context = checked.context ?: return blocked(requireNotNull(checked.block))
+        val order = context.order ?: return blocked(DisplayBlock.ORDER_UNAVAILABLE)
+        if (order.unsupported || order.ambiguous || (!order.available && order.savedOutputKeys.isEmpty())) {
+            return blocked(DisplayBlock.ORDER_NOT_EDITABLE)
+        }
+        if (context.inventory?.preview != null) return blocked(DisplayBlock.PREVIEW_ACTIVE)
+        if (context.hasUnresolved()) return blocked(DisplayBlock.OPERATION_UNRESOLVED)
+        return dispatch(host, ApiRoute.DISPLAY_ORDER_AUTOMATIC, sender)
+    }
+
+    private fun dispatchOrder(
+        host: ActiveHost, observation: StatusPollState, outputKeys: List<String>, generation: Long,
+        restart: Boolean, sender: JournalMutationSender,
+    ): DisplayDispatchResult {
+        val checked = context(host, observation, requireFresh = true)
+        val context = checked.context ?: return blocked(requireNotNull(checked.block))
+        val order = context.order ?: return blocked(DisplayBlock.ORDER_UNAVAILABLE)
+        if (!DisplayOrderPresentation.editable(order)) return blocked(DisplayBlock.ORDER_NOT_EDITABLE)
+        if (restart && !order.restartAvailable) return blocked(DisplayBlock.RESTART_UNAVAILABLE)
+        if (order.generation != generation) return blocked(DisplayBlock.STALE_SELECTION)
+        val connected = DisplayOrderPresentation.editableKeys(order)
+        if (outputKeys.isEmpty() || outputKeys.distinct().size != outputKeys.size ||
+            outputKeys.size != connected.size || !connected.containsAll(outputKeys)
+        ) return blocked(DisplayBlock.STALE_SELECTION)
+        if (context.inventory?.preview != null) return blocked(DisplayBlock.PREVIEW_ACTIVE)
+        if (context.hasUnresolved()) return blocked(DisplayBlock.OPERATION_UNRESOLVED)
+        return dispatch(host, ApiRoute.DISPLAY_ORDER_SET, sender,
+            "output_keys" to JsonValue.ArrayValue(outputKeys.map(::string)),
+            "generation" to number(generation), "restart" to JsonValue.BooleanValue(restart))
+    }
+
     private data class CheckedContext(val context: Context? = null, val block: DisplayBlock? = null)
 
     private fun context(host: ActiveHost, observation: StatusPollState, requireFresh: Boolean): CheckedContext {
@@ -192,13 +254,15 @@ class DisplayDispatcher(
                 return CheckedContext(block = DisplayBlock.STATUS_NOT_FRESH)
             }
         }
-        return CheckedContext(context = Context(state, active, read.outputs?.takeIf { it.available && !it.legacyShape }))
+        return CheckedContext(context = Context(state, active, read.outputs?.takeIf { it.available && !it.legacyShape },
+            read.order?.snapshot))
     }
 
     private data class Context(
         val state: PersistentState,
         val host: ActiveHost,
         val inventory: VersionedPayload.DisplayOutputs?,
+        val order: DisplayOrderSummary? = null,
     ) {
         fun ownsPreview(): Boolean {
             val id = inventory?.preview?.id ?: return false
