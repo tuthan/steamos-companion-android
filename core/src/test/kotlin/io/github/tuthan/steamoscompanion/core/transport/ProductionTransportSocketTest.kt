@@ -59,6 +59,20 @@ import org.junit.Test
 /** Exercises the production transport against a JVM loopback TLS host using the shipped test key. */
 class ProductionTransportSocketTest {
     @Test
+    fun malformedDisplayReadReportsTheFieldWithoutReturningTheResponseBody() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/display/outputs", Reply.Json(
+                """{"protocol_version":1,"available":true,"generation":1,"outputs":[{"id":"1","name":123,"generation":1,"modes":[]}]}"""))
+            val result = transport().execute(target(host), host.pin,
+                ApiRequest(HttpMethod.GET, "/v1/display/outputs",
+                    bearerToken = "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx"))
+            assertEquals(TransportFailure.PROTOCOL, (result as RequestOutcome.Unknown).failure)
+            assertEquals("'output.name' must be a string", result.diagnostic)
+            host.assertHealthy()
+        }
+    }
+
+    @Test
     fun preparedMutationRejectsMismatchedBodyAndSendsCommittedBytes() {
         FakeTlsHost().use { host ->
             host.script("POST /v1/power", Reply.Lost)
@@ -300,6 +314,7 @@ class ProductionTransportSocketTest {
     private sealed interface Reply {
         data class Fixture(val path: String) : Reply
         data class Body(val path: String) : Reply
+        data class Json(val body: String) : Reply
         data class HoldConnection(val release: CountDownLatch) : Reply
         data object Lost : Reply
     }
@@ -360,6 +375,7 @@ class ProductionTransportSocketTest {
                     }
                     is Reply.Fixture -> respondFixture(protocol, reply.path)
                     is Reply.Body -> respond(protocol, 200, resource(reply.path))
+                    is Reply.Json -> respond(protocol, 200, reply.body)
                     null -> if (request.method == "GET" && request.path == "/v1/discovery") {
                         respond(protocol, 200, """{"protocol_version":1,"service":"steamos-companion","host_id":"host-fixture0001xxxxxxxxxxxxx","certificate_fingerprint":"$pin","name":"JVM fake host"}""")
                     } else {

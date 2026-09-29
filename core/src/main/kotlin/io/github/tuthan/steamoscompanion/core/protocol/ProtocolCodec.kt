@@ -330,10 +330,13 @@ object ProtocolCodec {
         else -> bounded(asString(field), field, maxLength)
     }
 
-    /** The host permits empty display labels; use the stable output ID when one is blank. */
+    /** Host display labels may be empty or contain control characters; keep them presentable. */
     private fun JsonValue?.nullableDisplayLabel(field: String, maxLength: Int): String? = when (this) {
         null, JsonValue.NullValue -> null
-        else -> asString(field).let { if (it.isEmpty()) null else bounded(it, field, maxLength) }
+        else -> asString(field).let { value ->
+            if (value.length > maxLength) throw JsonFormatException("Invalid $field")
+            value.map { if (it.isISOControl()) ' ' else it }.joinToString("").takeIf(String::isNotBlank)
+        }
     }
 
     private fun JsonValue?.nullableBoolean(field: String): Boolean? = when (this) {

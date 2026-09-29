@@ -68,7 +68,7 @@ class PinnedStatusGateway(
                 }
                 is RequestOutcome.Rejected -> throw IOException("Host rejected ${route.path}: ${outcome.response.error}")
                 is RequestOutcome.NotSent -> throw failure(route, outcome.failure)
-                is RequestOutcome.Unknown -> throw failure(route, outcome.failure)
+                is RequestOutcome.Unknown -> throw failure(route, outcome.failure, outcome.diagnostic)
                 is RequestOutcome.PairingUnresolved -> throw IOException("Unexpected pairing response")
             }
         }
@@ -109,9 +109,9 @@ class PinnedStatusGateway(
         return PairedStatusRead(status, outputs, order, timing, outputsTiming, outputsError)
     }
 
-    private fun failure(route: ApiRoute, reason: TransportFailure): IOException =
+    private fun failure(route: ApiRoute, reason: TransportFailure, diagnostic: String? = null): IOException =
         if (reason == TransportFailure.PIN) PinnedCertificateChanged("${route.path}: certificate changed; re-pairing is required")
-        else IOException("${route.path}: $reason")
+        else IOException("${route.path}: $reason${diagnostic?.let { " ($it)" }.orEmpty()}")
 }
 
 class PinnedCertificateChanged(message: String) : IOException(message)

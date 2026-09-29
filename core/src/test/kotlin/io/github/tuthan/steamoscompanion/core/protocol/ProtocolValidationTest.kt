@@ -28,6 +28,23 @@ class ProtocolValidationTest {
     }
 
     @Test
+    fun displayOutputSanitizesHostPermittedControlCharactersInLabels() {
+        val fixture = BoundedJson.parseObject(
+            ProtocolFixtureAssertions.readResource("fixtures/contract/display-outputs/available.json"))
+        val body = fixture["response"].asObject("response")["body"].asObject("body")
+        val output = body["outputs"].asArray("outputs").single().asObject("output")
+        val labeled = JsonValue.ObjectValue(output.fields +
+            ("name" to JsonValue.StringValue("Panel\nA")) +
+            ("description" to JsonValue.StringValue("External\u0000 monitor")))
+        val altered = JsonValue.ObjectValue(body.fields +
+            ("outputs" to JsonValue.ArrayValue(listOf(labeled))))
+
+        val decoded = ProtocolCodec.decodeResponse(ApiRoute.DISPLAY_OUTPUTS,
+            HttpResponse(200, emptyMap(), BoundedJson.encode(altered))) as ApiReply.Versioned
+        assertEquals("Panel A", (decoded.payload as VersionedPayload.DisplayOutputs).outputs.single().name)
+    }
+
+    @Test
     fun requestBodiesFromEveryPinnedFixtureAreCheckedByTheAndroidValidator() {
         ProtocolFixtureAssertions.assertEveryFixtureRequestAgainstAndroidValidator()
     }

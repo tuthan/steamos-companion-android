@@ -89,7 +89,12 @@ sealed interface RequestOutcome {
     data class Rejected(val response: ApiReply.Rejected, val retryAfterMillis: Long?) : RequestOutcome
     data class NotSent(val failure: TransportFailure) : RequestOutcome
     /** A POST may have reached the host but no validated terminal response was obtained. */
-    data class Unknown(val failure: TransportFailure, val status: Int? = null) : RequestOutcome
+    data class Unknown(
+        val failure: TransportFailure,
+        val status: Int? = null,
+        /** Bounded parser/framing reason for diagnosis; never contains a response body. */
+        val diagnostic: String? = null,
+    ) : RequestOutcome
     /** Initial pairing may have created a pending request, but its one-time session/id was not received. */
     data class PairingUnresolved(val failure: TransportFailure, val status: Int? = null) : RequestOutcome
 }
@@ -291,8 +296,9 @@ class PinnedHttpTransport(
             }
             val decoded = try {
                 ProtocolCodec.decodeResponse(route, response, expectedOperationId)
-            } catch (_: Exception) {
-                return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), TransportFailure.PROTOCOL, responseStatus)
+            } catch (error: Exception) {
+                return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), TransportFailure.PROTOCOL,
+                    responseStatus, protocolDiagnostic(error))
             }
             return when (decoded) {
                 is ApiReply.Rejected -> RequestOutcome.Rejected(decoded, retryAfterMillis)
@@ -324,7 +330,8 @@ class PinnedHttpTransport(
             val failure = qualifyLegacyPermissionFailure(
                 if (permissionRevoked.get()) TransportFailure.PERMISSION else classify(error, scope),
             )
-            return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), failure, responseStatus)
+            return ambiguous(initialPairing, requestBytesMayHaveBeenSent.get(), failure, responseStatus,
+                if (failure == TransportFailure.PROTOCOL) protocolDiagnostic(error) else null)
         } finally {
             runCatching { permissionWatch?.close() }
             scope.close()
@@ -481,10 +488,17 @@ class PinnedHttpTransport(
         bytesMayHaveBeenSent: Boolean,
         failure: TransportFailure,
         status: Int?,
+        diagnostic: String? = null,
     ): RequestOutcome = when {
         !bytesMayHaveBeenSent -> RequestOutcome.NotSent(failure)
         initialPairing -> RequestOutcome.PairingUnresolved(failure, status)
-        else -> RequestOutcome.Unknown(failure, status)
+        else -> RequestOutcome.Unknown(failure, status, diagnostic)
+    }
+
+    private fun protocolDiagnostic(error: Exception): String? = when (error) {
+        is HttpFramingException,
+        is io.github.tuthan.steamoscompanion.core.protocol.JsonFormatException -> error.message?.take(160)
+        else -> null
     }
 
     private fun classify(error: Throwable, scope: RequestDeadline? = null): TransportFailure {
