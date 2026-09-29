@@ -45,6 +45,26 @@ class ProtocolValidationTest {
     }
 
     @Test
+    fun displayOutputKeepsMoreThanEightHostRecoveryProfiles() {
+        val fixture = BoundedJson.parseObject(
+            ProtocolFixtureAssertions.readResource("fixtures/contract/display-outputs/with-profile.json"))
+        val body = fixture["response"].asObject("response")["body"].asObject("body")
+        val sample = body["profiles"].asArray("profiles").single().asObject("profile")
+        val profiles = (1..12).map { index ->
+            JsonValue.ObjectValue(sample.fields + ("id" to JsonValue.StringValue("profile-$index")))
+        }
+        val altered = JsonValue.ObjectValue(body.fields +
+            ("profiles" to JsonValue.ArrayValue(profiles)))
+
+        val decoded = ProtocolCodec.decodeResponse(ApiRoute.DISPLAY_OUTPUTS,
+            HttpResponse(200, emptyMap(), BoundedJson.encode(altered))) as ApiReply.Versioned
+        val inventory = decoded.payload as VersionedPayload.DisplayOutputs
+        assertEquals(12, inventory.profiles.size)
+        assertEquals("profile-12", inventory.profiles.last().id)
+        assertEquals(1, inventory.outputs.size)
+    }
+
+    @Test
     fun requestBodiesFromEveryPinnedFixtureAreCheckedByTheAndroidValidator() {
         ProtocolFixtureAssertions.assertEveryFixtureRequestAgainstAndroidValidator()
     }

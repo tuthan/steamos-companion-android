@@ -255,7 +255,6 @@ object ProtocolCodec {
         if (available && generation == null && !legacyShape) throw JsonFormatException("Available display outputs need a generation")
         val profiles = body["profiles"]?.let { value ->
             val items = value.asArray("profiles")
-            if (items.size > 8) throw JsonFormatException("Too many recovery profiles")
             items.mapIndexed { index, item -> parseRecoveryProfile(item.asObject("profiles[$index]")) }
         }.orEmpty()
         val preview = body["preview"].takeOptionalObject("preview")?.let(::parseDisplayPreview)

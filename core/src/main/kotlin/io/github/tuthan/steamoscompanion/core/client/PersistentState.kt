@@ -15,6 +15,7 @@ object PersistentStateLimits {
     const val MAX_PLAINTEXT_BYTES = 64 * 1024
     const val MAX_ENVELOPE_BYTES = 65 * 1024
     const val MAX_JOURNAL_ENTRIES = 32
+    const val MAX_CACHED_RECOVERY_PROFILES = 8
     const val MAX_OPERATION_BODY_BYTES = 4 * 1024
     const val CURRENT_SCHEMA_VERSION = 6
     const val ENVELOPE_FORMAT_VERSION = 1
@@ -88,7 +89,8 @@ data class ActiveHost(
         wakeTarget.validated()
         lastObservedBootId?.let { requireText(it, "host boot ID", 128) }
         cachedRecoveryProfiles?.let { profiles ->
-            if (profiles.size > 8 || profiles.map { it.id }.distinct().size != profiles.size) {
+            if (profiles.size > PersistentStateLimits.MAX_CACHED_RECOVERY_PROFILES ||
+                profiles.map { it.id }.distinct().size != profiles.size) {
                 invalid(StateInvariantCode.INVALID_FIELD, "Invalid cached recovery profiles")
             }
             profiles.forEach { profile ->
