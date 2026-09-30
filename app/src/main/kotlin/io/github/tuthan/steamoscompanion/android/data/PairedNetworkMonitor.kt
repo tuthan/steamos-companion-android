@@ -36,7 +36,8 @@ class PairedNetworkMonitor(
 
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
             val flags = (if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) 1 else 0) or
-                (if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) 2 else 0)
+                (if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) 2 else 0) or
+                (if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) 4 else 0)
             val changed = synchronized(this@PairedNetworkMonitor) {
                 if (!registered) false else {
                     val previous = seen[network]
@@ -67,6 +68,8 @@ class PairedNetworkMonitor(
         val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+            .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             .build()
         registered = true
         try {

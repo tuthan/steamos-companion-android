@@ -273,7 +273,7 @@ class DisplayDispatcher(
         }
 
         fun hasUnresolved(exceptOwnedPreview: Boolean = false): Boolean = state.journal.any {
-            it.mayConflictWith(host) && it.phase.unresolved &&
+            it.mayConflictWith(host) && it.blocksLane &&
                 !(exceptOwnedPreview && it.belongsTo(host) && it.path == ApiRoute.DISPLAY_PREVIEW.path &&
                     it.operationId == inventory?.preview?.id)
         }

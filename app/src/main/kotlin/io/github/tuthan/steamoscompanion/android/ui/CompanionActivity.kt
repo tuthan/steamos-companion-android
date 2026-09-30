@@ -76,6 +76,7 @@ import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
 import io.github.tuthan.steamoscompanion.core.wake.WakeAttemptState
+import io.github.tuthan.steamoscompanion.core.wake.WakeRelay
 
 /** The single launch surface. Network actions are attached to this foreground graph. */
 class CompanionActivity : ComponentActivity() {
@@ -180,11 +181,18 @@ class CompanionActivity : ComponentActivity() {
                     if (pending is PreviewPresentation.Pending && pending.result == PendingDisplayResult.CHECKING_PREVIEW) {
                         pairedSession?.reviewEndedPreview()
                     }
+                    // Restore, revert and similar requests finish on the host after replying "accepted".
+                    if (saved?.journal?.any { it.phase.unresolved && !it.acknowledged && it.operationId != null } == true) {
+                        pairedSession?.reviewOpenOperations()
+                    }
                 }
                 LaunchedEffect(phase10.feedback?.revision) {
                     if (phase10.feedback != null) reloadPersistentState()
                 }
                 BackHandler(navigation.canGoBack) { navigation.back() }
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalAcknowledgeUnresolved provides { host?.let(phase08::acknowledgeUnresolved) },
+                ) {
                 CompanionRoot(route.destination, host, persisted, status, wake, runtime,
                     busy = phase08.busy, feedback = phase08.feedback,
                     displayBusy = displayActions.busy, displayFeedback = displayActions.feedback,
@@ -240,6 +248,7 @@ class CompanionActivity : ComponentActivity() {
                     onCheckOperation = { pairedSession?.reviewOperations() },
                     onPayload = { payload -> withLocalNetworkAccess { pairingFlow.startPayload(payload) } },
                     onRequestCamera = { cameraPermission.launch(Manifest.permission.CAMERA) })
+                }
             }
         }
     }
@@ -286,7 +295,8 @@ class CompanionActivity : ComponentActivity() {
         onState = { status = it; reloadPersistentState() },
         onWakeInterfaceChanged = { reloadPersistentState() },
         onWakeState = { wake = it },
-        onOperationReview = { _, _ -> reloadPersistentState() })
+        onOperationReview = { _, _ -> reloadPersistentState() },
+        onJournalChanged = { reloadPersistentState() })
 
     private fun withLocalNetworkAccess(action: () -> Unit) {
         pendingLanAction = action
@@ -400,7 +410,7 @@ private fun CompanionRoot(
                     runtime.aliasStore.get(host) ?: host.endpoint, actionContext(host, persisted, status),
                     persisted, status, runtime.clock.monotonicNanos(), busy, feedback,
                     onPowerConfirm, onCheckOperation)
-                UiDestination.WAKE -> if (host != null) WakeScreen(wake, host.wakeTarget.available, busy, onWake)
+                UiDestination.WAKE -> if (host != null) WakeScreen(wake, host.wakeTarget.available, busy, onWake, host.wakeTarget)
                 UiDestination.SUNSHINE -> if (host != null) SunshineScreen(
                     status.lastRead?.status?.sunshineState, actionContext(host, persisted, status),
                     host, persisted, status, runtime.clock.monotonicNanos(), busy, feedback,
@@ -408,7 +418,13 @@ private fun CompanionRoot(
                 UiDestination.CONNECTION_DETAILS -> if (host != null) ConnectionDetailsScreen(
                     persisted?.activeHost ?: host, runtime.aliasStore.get(host) ?: host.endpoint,
                     persisted, status, phase10Busy, phase10Feedback, onPairAnother,
-                    onConfirmReplacement, onDiscardReplacement, onRevoke, onForget, onExport)
+                    onConfirmReplacement, onDiscardReplacement, onRevoke, onForget, onExport,
+                    wakeRelay = runtime.wakeRelayStore.get(host)?.format().orEmpty(),
+                    suggestedWakeRelay = remember(status.lastSuccessMonotonicNanos) {
+                        runCatching { WakeRelay.suggestionFrom(runtime.networkAccess.activeLanPaths()) }
+                            .getOrNull()?.format().orEmpty()
+                    },
+                    onSaveWakeRelay = { runtime.wakeRelayStore.set(host, it) })
                 else -> {
                     Text(destination.wireName.replace('_', ' '), style = MaterialTheme.typography.headlineSmall,
                         color = Color(palette.text.toInt()))
@@ -532,6 +548,7 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
             ActionRow("Check result", enabled = operationId != null,
                 reason = if (operationId == null) "No operation ID was returned; review the host" else null,
                 onClick = onCheckOperation)
+            MarkReviewedRow()
         }
         PreviewPresentation.None -> Kicker(stringResource(R.string.ui_recovery))
     }

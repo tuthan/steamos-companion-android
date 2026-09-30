@@ -21,6 +21,10 @@ data class ControlOperationCard(
     val operationId: String?,
     val observed: ControlObservation,
     val pairingProven: Boolean,
+    /** False once the user marked it reviewed, or the host finished with it; the card then offers no review actions. */
+    val blocksLane: Boolean = true,
+    /** The journal's result text; power requests settled by [PowerSettlement] say what was observed. */
+    val summary: String? = null,
 )
 
 object ControlOperationPresentation {
@@ -37,7 +41,7 @@ object ControlOperationPresentation {
         return state.journal.asReversed().mapNotNull { entry ->
             val kind = kind(entry) ?: return@mapNotNull null
             val proven = entry.belongsTo(active)
-            if (!proven && !(entry.phase.unresolved && entry.mayConflictWith(active))) return@mapNotNull null
+            if (!proven && !(entry.blocksLane && entry.mayConflictWith(active))) return@mapNotNull null
             ControlOperationCard(
                 localGeneration = entry.localGeneration,
                 requestId = entry.requestId,
@@ -46,6 +50,8 @@ object ControlOperationPresentation {
                 operationId = entry.operationId,
                 observed = if (proven) observedFor(entry, kind, observedState) else ControlObservation.UNPROVEN_PAIRING,
                 pairingProven = proven,
+                blocksLane = entry.blocksLane,
+                summary = entry.resultSummary,
             )
         }
     }

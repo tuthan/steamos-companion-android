@@ -56,7 +56,7 @@ object DisplayRecoveryPresentation {
         if (StatusObservationSource.from(active) != StatusObservationSource.from(host)) return PreviewPresentation.None
         val entries = state.journal.filter { it.belongsTo(active) }
         val possibleConflicts = state.journal.filter { it.mayConflictWith(active) }
-        val unprovenConflict = possibleConflicts.any { it.phase.unresolved && !it.belongsTo(active) }
+        val unprovenConflict = possibleConflicts.any { it.blocksLane && !it.belongsTo(active) }
         val read = observation.lastRead?.takeIf {
             observation.source == StatusObservationSource.from(active) && it.status.hostId == active.hostId
         }
@@ -68,7 +68,7 @@ object DisplayRecoveryPresentation {
         }
         if (preview != null && !alreadyKept) {
             val owned = entries.any { it.path == ApiRoute.DISPLAY_PREVIEW.path && it.operationId == preview.id }
-            val conflicting = possibleConflicts.any { it.phase.unresolved &&
+            val conflicting = possibleConflicts.any { it.blocksLane &&
                 !(it.belongsTo(active) && it.path == ApiRoute.DISPLAY_PREVIEW.path && it.operationId == preview.id) }
             val deadlineMillis = try {
                 BigDecimal(preview.deadlineSeconds).movePointRight(3).setScale(0, RoundingMode.DOWN).longValueExact()
@@ -91,7 +91,7 @@ object DisplayRecoveryPresentation {
                 revertAvailable = owned && !conflicting,
             )
         }
-        val pending = possibleConflicts.filter { it.phase.unresolved && it.path in DISPLAY_ROUTES }
+        val pending = possibleConflicts.filter { it.blocksLane && it.path in DISPLAY_ROUTES }
             .maxByOrNull { it.localGeneration } ?: return PreviewPresentation.None
         val result = if (!pending.belongsTo(active)) PendingDisplayResult.REVIEW_LEGACY_OPERATION else when (pending.path) {
             ApiRoute.DISPLAY_PREVIEW.path -> if (pending.operationId == null) {

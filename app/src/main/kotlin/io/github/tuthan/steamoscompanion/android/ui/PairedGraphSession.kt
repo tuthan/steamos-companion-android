@@ -25,6 +25,7 @@ class PairedGraphSession(
     private val onWakeInterfaceChanged: () -> Unit,
     private val onWakeState: (WakeAttemptState?) -> Unit = {},
     private val onOperationReview: (Long, ReconcileResult) -> Unit = { _, _ -> },
+    private val onJournalChanged: () -> Unit = {},
 ) : Closeable {
     private val main = Handler(Looper.getMainLooper())
     private val clock = runtime.clock
@@ -46,8 +47,11 @@ class PairedGraphSession(
     }
     private val poller = StatusPoller(host, runtime.statusGateway, runtime.clock::monotonicNanos) { state ->
         val generation = lifecycleGeneration.get()
+        // Off the main thread: an accepted power request finishes when the device drops off or returns.
+        val settled = try { runtime.powerSettlement.observe(host, state) } catch (_: RuntimeException) { false }
         main.post {
             if (started && !closed && generation == lifecycleGeneration.get()) {
+                if (settled) onJournalChanged()
                 onState(state)
                 wakeAttempt?.let { attempt ->
                     val before = attempt.state
@@ -141,6 +145,12 @@ class PairedGraphSession(
         if (!started || closed) return
         operations.stop()
         operations.start()
+    }
+
+    /** An accepted host operation is still open; see whether the host has finished it. */
+    fun reviewOpenOperations() {
+        requireMainThread()
+        if (started && !closed) operations.reviewOpenOperations(clock.monotonicNanos())
     }
 
     /** A preview vanished from the host but its operation is still open; see if the host restored it. */

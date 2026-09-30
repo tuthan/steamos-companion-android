@@ -31,6 +31,7 @@ import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
 import io.github.tuthan.steamoscompanion.core.client.OrderRestartConfirmation
+import io.github.tuthan.steamoscompanion.core.client.OperationLanePresentation
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
 import io.github.tuthan.steamoscompanion.core.client.PreviewPresentation
 import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
@@ -112,6 +113,7 @@ fun DisplayScreen(
             StatusTone.WARNING, glyph = StatusGlyph.QUESTION, detail = "Check the original operation")
         PreviewPresentation.None -> Unit
     }
+    LaneReviewRow(host, state)
     val orderTab = DisplayOrderPresentation.offered(order)
     val tabKeys = buildList { add(TAB_RESOLUTION); add(TAB_SAVED); if (orderTab) add(TAB_ORDER) }
     var tabKey by rememberSaveable(startOnOrder) { mutableStateOf(if (startOnOrder) TAB_ORDER else TAB_RESOLUTION) }
@@ -124,7 +126,8 @@ fun DisplayScreen(
         val orderBlock = when {
             "display.control" !in host.grantedScopes -> "Changing the display order needs display control permission"
             preview != PreviewPresentation.None -> "Waiting for this preview to be kept or reverted"
-            operationCard?.phase?.unresolved == true -> "Check the unresolved display operation first"
+            state != null && OperationLanePresentation.hasUnresolved(host, state) ->
+                "An earlier request has no confirmed result. Check it or mark it reviewed above."
             else -> null
         }
         DisplayOrderPanel(order, orderDraft.value, onDraft = { orderDraft.value = it },
@@ -231,8 +234,9 @@ fun DisplayScreen(
                 if (card.phase == JournalPhase.FAILED) StatusTone.WARNING else StatusTone.UNKNOWN)
             StatusLine("Current display: ${observationLabel(card.observed)}",
                 if (card.observed == DisplayObservation.CONNECTION_LOST) StatusTone.WARNING else StatusTone.UNKNOWN)
-            card.failure?.let { StatusLine(failure(it), StatusTone.WARNING) }
-            if (card.phase.unresolved) ActionRow("Check result", enabled = card.operationId != null,
+            card.failure?.let { StatusLine(failure(it), StatusTone.WARNING,
+                detail = card.summary?.takeIf { _ -> card.phase == JournalPhase.FAILED }) }
+            if (card.phase.unresolved && card.blocksLane) ActionRow("Check result", enabled = card.operationId != null,
                 reason = if (card.operationId == null) "No operation ID was returned; review the host" else null,
                 icon = R.drawable.ic_status_question, onClick = onCheckOperation)
         }
@@ -267,6 +271,35 @@ fun DisplayScreen(
             onConfirm = { keepConfirmation = null; onKeep(captured) },
         )
     }
+}
+
+/**
+ * Shown whenever any earlier request blocks this credential's actions, not only when the newest card is
+ * that request: the blocker can be an older entry that no card presents, and then nothing else offers a way out.
+ */
+@Composable
+internal fun LaneReviewRow(host: ActiveHost, state: PersistentState?) {
+    if (state == null || !OperationLanePresentation.hasUnresolved(host, state)) return
+    StatusLine("An earlier request has no confirmed result", StatusTone.WARNING, glyph = StatusGlyph.QUESTION,
+        detail = "It blocks new actions until the host settles it or you mark it reviewed")
+    MarkReviewedRow()
+}
+
+/** Lets any screen with an unresolved-operation card offer the explicit, confirmed way out. */
+val LocalAcknowledgeUnresolved = androidx.compose.runtime.staticCompositionLocalOf<() -> Unit> { {} }
+
+@Composable
+internal fun MarkReviewedRow() {
+    val acknowledge = LocalAcknowledgeUnresolved.current
+    var confirming by remember { mutableStateOf(false) }
+    ActionRow(stringResource(R.string.ui_mark_reviewed), secondary = stringResource(R.string.ui_mark_reviewed_hint),
+        icon = R.drawable.ic_check, onClick = { confirming = true })
+    if (confirming) PictureConfirmationDialog(
+        title = stringResource(R.string.ui_mark_reviewed_title),
+        body = stringResource(R.string.ui_mark_reviewed_body),
+        confirmLabel = stringResource(R.string.ui_mark_reviewed),
+        onDismiss = { confirming = false },
+        onConfirm = { confirming = false; acknowledge() })
 }
 
 @Composable

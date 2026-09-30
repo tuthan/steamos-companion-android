@@ -16,7 +16,7 @@ import java.net.Socket
 import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
 
-/** Selects Wi-Fi/Ethernet networks and binds DNS plus each socket to the same Android Network. */
+/** Selects Wi-Fi/Ethernet/VPN networks and binds DNS plus each socket to the same Android Network. */
 class AndroidNetworkAccess(context: Context) : NetworkAccess {
     private val localNetwork = LocalNetworkAccess(context.applicationContext)
     private val connectivity = context.applicationContext.getSystemService(ConnectivityManager::class.java)
@@ -30,16 +30,19 @@ class AndroidNetworkAccess(context: Context) : NetworkAccess {
         val found = linkedMapOf<String, LanPath>()
         connectivity.allNetworks.forEach { network ->
             val capabilities = connectivity.getNetworkCapabilities(network) ?: return@forEach
-            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            val tunnel = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            if (!tunnel &&
+                !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
                 !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
             ) return@forEach
             val properties = connectivity.getLinkProperties(network) ?: return@forEach
             val id = network.toString()
             networks[id] = network
-            found[id] = properties.toLanPath(id)
+            found[id] = properties.toLanPath(id, tunnel)
         }
         networks.keys.retainAll(found.keys)
-        return found.values.toList()
+        // Tunnels last: callers that take the first path (pairing, Wake fallback) prefer a real LAN.
+        return found.values.sortedBy { it.tunnel }
     }
 
     override fun resolve(host: String, path: LanPath): List<InetAddress> {
@@ -52,14 +55,28 @@ class AndroidNetworkAccess(context: Context) : NetworkAccess {
         val network = networks[path.id] ?: refresh(path.id)
             ?: throw IOException("Selected LAN network is no longer available")
         if (socket.isConnected) throw IOException("Network must be bound before connect")
-        network.bindSocket(socket)
+        bindOrFollowDefault(path) { network.bindSocket(socket) }
     }
 
     override fun bind(socket: DatagramSocket, path: LanPath) {
         val network = networks[path.id] ?: refresh(path.id)
             ?: throw IOException("Selected LAN network is no longer available")
         if (socket.isConnected) throw IOException("Network must be bound before connect")
-        network.bindSocket(socket)
+        bindOrFollowDefault(path) { network.bindSocket(socket) }
+    }
+
+    /**
+     * Android refuses an explicit bind to a VPN network for apps the VPN does not select (or under a
+     * lockdown), with EPERM. A socket left unbound follows the default network, which is the tunnel
+     * whenever it applies to this app, so a tunnel path falls back to that instead of failing outright.
+     * A LAN path still fails loudly: binding there must never silently use another network.
+     */
+    private inline fun bindOrFollowDefault(path: LanPath, bind: () -> Unit) {
+        try {
+            bind()
+        } catch (error: IOException) {
+            if (!path.tunnel) throw error
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -69,7 +86,7 @@ class AndroidNetworkAccess(context: Context) : NetworkAccess {
         return network
     }
 
-    private fun LinkProperties.toLanPath(id: String): LanPath {
+    private fun LinkProperties.toLanPath(id: String, tunnel: Boolean): LanPath {
         val addresses = linkAddresses.map { it.address }.filterNot { it.isLoopbackAddress || it.isAnyLocalAddress }
         val broadcasts = linkAddresses.mapNotNull { link ->
             val address = link.address as? Inet4Address ?: return@mapNotNull null
@@ -92,6 +109,9 @@ class AndroidNetworkAccess(context: Context) : NetworkAccess {
                 if (address.isLoopbackAddress || address.isAnyLocalAddress || address.isMulticastAddress) return@mapNotNull null
                 Ipv4Subnet(address, link.prefixLength)
             },
+            tunnel = tunnel,
+            gateways = routes.filter { it.isDefaultRoute }.mapNotNull { it.gateway as? Inet4Address }
+                .filterNot { it.isAnyLocalAddress }.distinct(),
         )
     }
 

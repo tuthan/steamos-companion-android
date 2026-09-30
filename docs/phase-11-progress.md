@@ -102,3 +102,116 @@ A preview that runs out of time is restored by the host, so there is nothing lef
 `Phase02PairingGateTest.noncePairingShowsTheHostDerivedCodeAndStoresTheReturnedCredential` failed when the emulator was busy: the fake host ran scrypt before replying, so a loaded emulator missed the client's transport deadline (initial request came back `RequestUnconfirmed`, or the approval poll was never recorded). The fake host now derives the comparison code lazily after the exchange. The test passed on an API 36 emulator with 16 CPU-burning processes running on the development machine.
 
 JVM totals: 363 core and 50 app tests, no failures. The API 36 baseline suite passed before this change (47 tests, one LAN-matrix skip); only the pairing-gate class was re-run after it.
+
+## Wake over VPN (2026-09-30)
+
+Wake and status did not work through a VPN: `activeLanPaths()` only kept Wi-Fi/Ethernet networks and the magic packet was a broadcast, which WireGuard doesn't carry. Slices 1–3 are implemented: VPN networks are tunnel paths (ordered last, skipped by discovery), `WakeSender` unicasts the magic packet to a user-set relay on a tunnel path, and Connection details has a "Wake relay (VPN)" field stored per host in `SharedPreferences`. The finding, the relay design (`socat` on the WireGuard server), the storage decision and the open physical test (slice 4) are in [`wake-over-vpn.md`](wake-over-vpn.md). Nothing has run through a real tunnel.
+
+## Stuck "Another display operation needs review" (2026-09-30)
+
+The tester's phone reached a state where every display and control action reported "Another display operation needs review" and nothing could be changed. No ADB device was attached to the development machine and no diagnostics export was supplied, so **the exact journal entry on that phone is not observed**. The cause below is from code review.
+
+Any unresolved journal entry (`prepared`, `accepted`, `dispatched`, `observed_return`, `unknown`) blocks every new mutation for the credential. Only a host reply settled one, and `OperationJournal.acknowledge()` existed but was not wired to the UI and was not honoured by any blocking check. Four states can never settle, so they blocked permanently with no way out:
+
+1. An entry with no operation ID (a lost reply, or `prepared` reset to `unknown` after process death). "Check result" is disabled for it and the reconciler returns `OPERATION_ID_MISSING`.
+2. A legacy entry without credential provenance. `belongsTo` is false, so the foreground sweep skips it and `reconcile` returns `PAIRING_CHANGED`.
+3. An entry whose host record was pruned (404): `markOperationNotFound` keeps it `unknown`.
+4. An entry the host leaves at `observed_return`, including a preview whose ended-preview lookups hit the cap of 6.
+
+Fix: `JournalEntry.blocksLane` (`unresolved && !acknowledged`) now backs every blocking check (`DisplayDispatcher`, `ControlDispatcher`, `OperationJournal.dispatchForHost`, `OperationLanePresentation`, `DisplayRecoveryPresentation`, and the operation cards). `OperationJournal.acknowledgeUnresolved(host)` marks the credential's unresolved entries reviewed in one transaction: it rejects a changed pairing, keeps the recorded phase (an unknown result stays unknown in history and diagnostics) and resends nothing. The Display screen, Power and Sunshine cards and the overview's pending-result row show a "Mark as reviewed" action with a confirmation dialog that says the earlier request may have run. Three new `DisplayDispatcherTest` cases cover the lost-reply restart, a legacy entry and a changed pairing (31 tests in that class pass).
+
+Limits: this is a user-confirmed escape hatch, not a fix for why the entry never settled. If it recurs, export the sanitized diagnostics before tapping "Mark as reviewed"; the export lists each entry's path, phase, operation ID and summary. Marking a live preview's operation reviewed does not remove the Keep/Revert card, which is driven by the host's preview.
+
+## Wake failure and display order not applying (2026-09-30, second tester report)
+
+The tester reported "couldn't send wake packet" and that display order could not be saved or applied on Android although it worked from the Omarchy and Decky clients. No ADB device was attached and no diagnostics export was supplied, so **neither failure has been observed on the phone**.
+
+**Display order.** The wire format matches the host: the Android request body is the same as the Omarchy client's (`output_keys`, `generation`, `restart`, `request_id`) and the contract fixtures pass. The Android-side gate is the difference. `DisplayDispatcher` refuses every order change while any journal entry for the credential is unresolved, and two host behaviours left entries unresolved with no way to settle:
+
+1. **Power requests.** The Decky host ends `power.*` at `observed_return` permanently ("physical transition is not confirmed by this response"), and its own mutation lane treats only `accepted` and `dispatched` as active (`ACTIVE_STATES` in `operations.py`). Android held its lane closed for that entry, so the first Suspend or Restart blocked display and order changes from then on. The tester was testing suspend/wake, which is the likely trigger. `JournalEntry.hostReturnedPower` now stops such an entry from blocking; the journal keeps its phase and the Power card still shows it.
+2. **Async host operations.** Restore and revert reply `accepted` and finish on a host worker thread. Android only re-read them once per app start or on a manual "Check result", so the entry blocked everything in between. `ForegroundOperationReview.reviewOpenOperations` now asks the host every 3 s while the paired screen is visible, at most 20 times per entry, read-only, and the paired Activity calls it on each status read while a resolvable entry is open.
+
+Together with "Mark as reviewed" (above) this covers the known ways the lane wedged. The host's own 409 `mutation_conflict` for a live preview is unchanged and is reported by the existing messages.
+
+**Wake.** `WakeSendLiveTest` (new, `androidTest`) sends through the real Android socket stack bound to the emulator's Wi-Fi network on API 36: both the directed broadcast (`10.0.2.255`) and `255.255.255.255` were sent, so the send path itself works on Android 16 and the phone's failure depends on its network. Two changes make the next run conclusive:
+
+- The Wake screen now gives a distinct message for each failure (`PERMISSION`, `NETWORK_MISSING`, `TARGET_MISSING`, `RELAY_REQUIRED`, `SEND_FAILED`), and a bounded platform error such as `sendto failed: EPERM` appears under it (`WakeSendResult.Failed.detail`).
+- `WakeSender` no longer stops at the first refused destination. A failed `send` did not transmit that packet, so it still tries the next one, for example the limited broadcast after a refused directed broadcast. The result is `Partial` when any packet left and `Failed` when none did.
+
+Read the detail line on the next failure. If it is `NETWORK_MISSING`, compare `activeLanPaths()` with the phone's actual network (for example a VPN without Wi-Fi flags).
+
+## Third tester report: stuck after a display-order change (2026-09-30)
+
+After changing the monitor order the tester saw "host reachable; physical transition unconfirmed", a black screen on the Deck, no restart action and no "Mark as reviewed" action. No device was attached, so the exact screen text is not observed. Code review found two dead ends, one of them introduced by the earlier "Mark as reviewed" change:
+
+1. **The Display order tab kept its own lock.** `DisplayScreen` disabled every order control while the latest display operation card was `phase.unresolved`, independent of the lane check. After the user marked it reviewed, the card's review rows disappeared (correctly) but this gate stayed, so the order tab, including "Save and restart Gaming Mode", stayed disabled with no way to clear it. The gate now uses the same lane check as the dispatcher.
+2. **The review action lived only on the newest card.** If the entry blocking the lane was older than the newest display or control card, or of another kind, no screen offered a way out. `LaneReviewRow` now shows "An earlier request has no confirmed result" plus "Mark as reviewed" at the top of the Display, Power and Sunshine screens whenever the lane is blocked, regardless of which card is newest.
+
+Also: "Save and restart Gaming Mode" no longer waits for the previous save's readback (`pendingKeys`); restarting is the natural next step after "Save for next session".
+
+Not fixable from the app: Power → Restart needs Steam's power bridge, which is down while Gaming Mode is black, so that button is unavailable by design. The app's only Gaming Mode restart is "Save and restart Gaming Mode"; the host has no restart-only or reset-and-restart call. Recovery from a black screen without the app: `systemctl --user restart gamescope-session.target` on the Deck, or `display order-reset` from the Omarchy client.
+
+## Fourth tester report: Wake over VPN EPERM, power requests (2026-09-30)
+
+The tester recovered Gaming Mode with the previous build. Wake through the VPN then failed with `SocketException: binding socket to network 196 failed: EPERM`, which the new Wake error line made visible.
+
+**EPERM.** `Network.bindSocket` fails with EPERM when the app may not use that network explicitly: a VPN that does not select this app's UID, or a lockdown ("block connections without VPN") that refuses a bind to the underlying Wi-Fi. Which network 196 was is not recorded. Two changes:
+
+- `WakePaths.candidates` chooses networks by where the host is. A network whose subnet holds the host's IPv4 address is tried first, then tunnels. A foreign Wi-Fi (for example away from home) is no longer picked just because it is first in the list. With a hostname endpoint and no tunnel, the old behaviour remains. `WakeSender.send(target, candidates, relay)` tries them in order, so an unusable path cannot hide a working one, and reports `RELAY_REQUIRED` ahead of a platform error.
+- `AndroidNetworkAccess.bind` no longer fails on a tunnel path when the platform refuses the explicit bind; the socket is left unbound and follows the default network, which is the tunnel whenever it applies to this app. This also covers status and control requests over the VPN. LAN paths still fail loudly. Trade-off: if the VPN does not apply to this app, an unbound Wake packet or pinned-TLS request goes out on the default network; the packet carries only the MAC, and TLS is pinned, so a wrong network fails rather than talks to another host. Sending to a LAN address over the tunnel still needs that LAN in the peer's `AllowedIPs`.
+
+**Power requests.** The Decky host replies `accepted`, runs the Steam call on a worker, and ends at `observed_return` ("Steam returned; the physical transition is not confirmed"); it never reaches `succeeded`. Client side (already in place) that entry no longer blocks anything, and the app now tells the user "The device accepted the request. It may disconnect now." and labels the card "accepted by the device" instead of the raw phase. **Host side, checked and left unchanged.** Decky already treats `observed_return` as a terminal operation state (`TERMINAL_STATES` in `host/backend/operations.py`; only `accepted` and `dispatched` are active and block its own mutation lane), its own client code and the Omarchy panel treat it as finished ("Host observed the request"), and the pinned `protocol/schema.json` lists it as a separate state. So the host does ack the request and finish its side; the stuck state was Android holding `observed_return` as unresolved. Changing `_run_power` to report `succeeded` would claim more than Steam's return proves ("physical transition not confirmed"), alter a shared contract and its fixtures, and fix nothing the Android change doesn't already fix. The only behaviour an operator might notice is the Omarchy CLI exiting 2 for `observed_return` (`_exit_code` in `client/cli.py`), which is intentional: the request was accepted but its outcome is unconfirmed. Correction: an earlier note in this section proposed changing `_run_power`; that proposal is withdrawn.
+
+## Relay suggestion (2026-09-30)
+
+Connection details pre-fills the "Wake relay (VPN)" field with the default gateway of the current Wi-Fi/Ethernet network when no relay is saved (`LanPath.gateways`, `WakeRelay.suggestionFrom`; tunnel paths and IPv6 gateways are ignored). It is a suggestion only: nothing is sent to it until the user taps Save, because the router only helps if it actually forwards wake packets, and a silent default would show "Wake packet sent" when nothing woke the host. Over WireGuard the gateway's LAN address must be inside the peer's `AllowedIPs`, which status reads need anyway.
+
+## Build (2026-09-30)
+
+`./gradlew --offline :core:check` passes (new: `OpenOperationReviewTest`, `WakeRelayTest` suggestion case, tolerant-send cases in `WakeSenderTest`, three "mark reviewed" cases in `DisplayDispatcherTest`) and both app flavors compile. `:app:check` fails only on `CompanionComponentGalleryCaptureTest` (Robolectric native runtime, both flavors), which also fails on the tree without these changes. The APKs built earlier today predate the power-lane, auto-review, Wake-detail and relay-suggestion changes; **rebuild before device testing**. Test builds are signed with the local Android debug certificate (`24d9207c…d236d0`) so they install over earlier test builds and keep the pairing and journal; they are not production-signed.
+
+Latest device-test APK (built after the third-report fix): `app/build/outputs/apk/baseline/release/app-baseline-release-test-signed.apk`, SHA-256 `7775ae735314e3ca7b527702c407f72de0ac9791f228763a55629c188aea3acb`, signed with the local debug certificate, versionCode 1. `:core:check` passed before this build; the release variant was built but `:app:check` was not rerun after the last UI edit, and the UI change has not run on a device.
+
+Device-test APK after the fourth-report changes: `app/build/outputs/apk/baseline/release/app-baseline-release-test-signed.apk`, SHA-256 `8d14fa86c284bdcc38eb7cec007cb784a1ecb71157a2eeeaa4559249ea4bd17c` (debug-signed, versionCode 1). This supersedes the hash above. `:core:check` passed; the release variant was built but `:app:check` was not rerun, and the Wake-over-VPN change has not run through a real tunnel.
+
+Device-test APK with the Wake diagnostics (destinations, MAC, interface, Wi-Fi hint): same path, SHA-256 `85d2c1767c7aa921e5353dd795828f53342499cdcaf8bfa07f93ecfacb75a99d`. Supersedes the hash above; `:core:check` passed, `:app:check` was not rerun.
+
+## Fifth tester report: preview resolution failed on Android but works from Omarchy (2026-09-30)
+
+The Display screen showed "current mode differs from the request" and "Host did not confirm the display request". Wake through the Raspberry Pi relay now works. No device was attached, so the host's actual reason is **not observed**.
+
+What the two messages mean: the preview request was accepted (202) and then the host's worker ended the operation as `failed` (`_run_preview` in Decky: Steam rejected the mode, or the output's identity or generation changed before dispatch); the second line is Android's own read that the output still runs its old mode. The request body is the same as the Omarchy client's (`output_id`, `mode_id`, `generation`, `request_id`), and a stale target would have been a synchronous 409, not this. The defect was that Android kept only the host's `outcome` and dropped its `reason`, so every async failure collapsed into the generic line. `OperationJournal` now stores the host's `reason` (control characters stripped, 160 characters) in the result summary for a `failed` operation only, and the Display screen's failure line shows it underneath ("failed: Steam rejected display mode", for example). Entries that already failed before this build have no stored reason; repeat the preview to see it.
+
+Next step: repeat the preview that failed and read the new line. If it is "Steam rejected display mode", compare the mode chosen on Android with the one that works from Omarchy (resolution and refresh rate); if it names an identity or generation change, the inventory the phone held was stale.
+
+
+Device-test APK with host failure reasons: same path, SHA-256 `00bb4071479f21f4baa9f70573ad09395906ea18a88ad92bdfcb84658e0842d1`. Supersedes the hash above; `:core:check` passed, `:app:check` was not rerun.
+
+## Sixth tester report: preview still fails; journal shows it "blocked" (2026-09-30)
+
+The tester was testing over the VPN (Wake through the Pi relay had just started working) when the preview failed again; Connection details lists a failed entry with the "blocked" icon, which is how a `failed` phase is drawn. The host's reason was not reported, so the cause below is **inferred, not observed**.
+
+`CompanionApplication.mutationSender` (every control and display POST) used only one network: the one named like the host's recorded interface, else the first in the list. Status reads, by contrast, iterate every network, which is why status worked over the tunnel while the POST did not. With the phone off the home LAN (a foreign Wi-Fi plus the VPN, or cellular plus the VPN) that one network was the wrong one, the request was never sent (`NotSent`), and the journal entry became `failed`. A `NotSent` entry has no host rejection code, which maps to the generic "Host did not confirm the display request". The Omarchy plugin runs on the LAN, so it never hit this. The earlier tunnel-path change made it reachable by adding the tunnel to the list, and the first path was still a non-tunnel one.
+
+Fix: the sender now uses `HostPaths.candidates` (moved from `WakePaths`, now in `core/ports`): the network whose subnet holds the host first, then any VPN tunnel, else every network as before. It moves to the next network only after `NotSent`, which means no byte left the phone, so a request cannot be repeated; `VALIDATION`, `CANCELLED` and `PERMISSION` stop it. Replies, rejections and unknown outcomes are returned as before. The explicit-bind fallback for tunnel paths (above) applies here too.
+
+Also: the Connection details journal now ends a failed line with the stored reason ("· Not sent: connect", "· failed: Steam rejected display mode"), so the actual cause is visible without a debugger.
+
+Next step: repeat the preview while on the VPN and read the journal line. "Not sent" means the network choice or tunnel routing, `failed: …` is the host's own reason. Not verified on a device; the ordering has unit tests (`HostPathsTest`), the sender loop has none.
+
+
+Device-test APK with per-network control requests and journal reasons: same path, SHA-256 `2cbc8607a989a3e574bcb7991f3c0676e65b3b236cbde75b78b50124e6778939`. Supersedes the hash above; `:core:check` passed, `:app:check` was not rerun.
+
+## Power requests finish on their own (2026-09-30)
+
+The tester asked that suspend and shutdown count as success once the host accepts them and the device drops off, and that restart wait for the device to come back. `PowerSettlement` (core) now settles accepted power entries from each status observation, off the main thread, from the paired session's poller:
+
+- **Suspend / shutdown:** the host acknowledged the request (operation ID, phase `accepted`, `dispatched` or `observed_return`) and the device then stopped answering: the entry becomes `succeeded` ("Device went offline after accepting the request") and no longer blocks anything.
+- **Restart:** stays pending while the device is offline. It becomes `succeeded` when a status read returns a boot ID different from the one recorded at request time ("Device restarted and is back online"), or, if that boot ID was unknown, when the device returned after being seen offline. A read with the same boot ID does not settle it, so a restart that did not happen is not reported as done. While it waits, the Power screen shows "Restarting. Waiting for the device to come back…" and the existing poller keeps checking every 6 s; nothing is resent.
+- A power request whose reply was lost (no operation ID) is not settled automatically: without the host's acknowledgement the app cannot tell a suspend from a dropped connection, so it stays for the user to review.
+- Any observation from another credential is ignored.
+
+Limits: "offline" is the poller's `unreachable`, which also happens when the phone loses its own network, so a phone-side outage after an accepted request can settle a suspend as done; the entry only clears the lane and never resends. An in-memory record of "seen offline" is lost if the app is killed mid-restart; a changed boot ID still settles it afterwards. A suspend accepted while the app was in the background and resumed before the app returned is not settled (boot ID unchanged, never seen offline) and stays non-blocking as `observed_return`. Five `PowerSettlementTest` cases cover these paths. Not run on a device.
+
+
+Device-test APK with power settlement: same path, SHA-256 `a1dfa8b8a0f72b7d92a893d5ec1a661e4feae3b8e695d2378aca7a44365c484d`. Supersedes the hash above; `:core:check` passed, `:app:check` was not rerun.

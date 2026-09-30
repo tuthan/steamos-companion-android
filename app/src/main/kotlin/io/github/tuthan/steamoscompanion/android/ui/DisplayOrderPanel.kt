@@ -125,7 +125,9 @@ internal fun DisplayOrderPanel(
     if (blockedReason != null) StatusLine(blockedReason, StatusTone.WARNING)
 
     PrimaryAction("Save for next session", enabled = canEdit, icon = R.drawable.ic_download, onClick = onSave)
-    DangerAction("Save and restart Gaming Mode", enabled = canEdit && order.restartAvailable,
+    // Restarting is the next step after "Save for next session", so it must not wait for that save's readback.
+    val canRestart = canAct && draft != null && !draft.stale && DisplayOrderPresentation.editable(order)
+    DangerAction("Save and restart Gaming Mode", enabled = canRestart && order.restartAvailable,
         icon = R.drawable.ic_replay, onClick = onSaveAndRestart)
     GhostAction("Use automatic order", enabled = canAct && order.savedOutputKeys.isNotEmpty() && !order.unsupported &&
         !order.ambiguous, onClick = onReset)

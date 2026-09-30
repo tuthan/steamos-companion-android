@@ -57,7 +57,7 @@ class OperationReconciler(
                 reconciled(journal.applyOperationSnapshot(
                     active, entry.localGeneration, entry.hostId, entry.clientId, entry.originalEndpoint,
                     entry.originalCertificatePin, operation.id, operation.requestId, operation.kind,
-                    operation.state, operation.outcome, hostRestored = operation.hostRestored,
+                    operation.state, operation.outcome, reason = operation.reason, hostRestored = operation.hostRestored,
                 ))
             }
             is RequestOutcome.Rejected -> if (response.response.status == 404) {

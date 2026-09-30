@@ -156,7 +156,7 @@ class OperationJournal(
             val room = makeRoom(nextState)
             if (encoded.route.route != ApiRoute.PAIR_REVOKE_SELF) {
                 val unresolved = room.filter {
-                    it.localGeneration != entry.localGeneration && it.phase.unresolved && it.mayConflictWith(host)
+                    it.localGeneration != entry.localGeneration && it.blocksLane && it.mayConflictWith(host)
                 }
                 if (unresolved.isNotEmpty() && !(unresolved.size == 1 &&
                     isOwnedPreviewRecovery(unresolved.single(), host, request))
@@ -278,6 +278,7 @@ class OperationJournal(
         operationState: WireValue<OperationState>,
         outcome: String?,
         nowMillis: Long = clock.wallTimeMillis(),
+        reason: String? = null,
         /** The host reports it restored and verified the original mode for this preview (timeout or revert). */
         hostRestored: Boolean = false,
     ): JournalUpdateResult = update { state ->
@@ -298,7 +299,7 @@ class OperationJournal(
         val phase = if (timedOutAndRestored) JournalPhase.SUCCEEDED else phaseFor(operationState)
         if (!canTransition(old.phase, phase)) throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Operation state moved backwards")
         val summary = if (timedOutAndRestored) "succeeded: preview timed out; host restored the original mode"
-            else summary(operationState, outcome)
+            else summary(operationState, outcome, reason)
         val updated = old.copy(
             phase = phase,
             updatedAtMillis = nowMillis.coerceAtLeast(old.updatedAtMillis),
@@ -344,6 +345,39 @@ class OperationJournal(
         if (index < 0) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Journal entry no longer exists")
         val old = state.journal[index]
         state.copy(journal = state.journal.toMutableList().also { it[index] = old.copy(acknowledged = true) })
+    }
+
+    /** A power request the host acknowledged finished as expected (see [PowerSettlement]); the phase becomes succeeded. */
+    fun settleAcknowledgedPower(expectedHost: ActiveHost, localGeneration: Long, summary: String): JournalUpdateResult =
+        update { state ->
+            if (!samePairing(state.activeHost, expectedHost)) {
+                throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed")
+            }
+            val index = state.journal.indexOfFirst { it.localGeneration == localGeneration }
+            if (index < 0) throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Journal entry no longer exists")
+            val old = state.journal[index]
+            if (!old.belongsTo(expectedHost) || old.path != ApiRoute.POWER.path || old.operationId == null ||
+                old.phase !in setOf(JournalPhase.ACCEPTED, JournalPhase.DISPATCHED, JournalPhase.OBSERVED_RETURN)
+            ) throw StateInvariantException(StateInvariantCode.INVALID_JOURNAL, "Entry cannot be settled")
+            val settled = old.copy(
+                phase = JournalPhase.SUCCEEDED,
+                updatedAtMillis = clock.wallTimeMillis().coerceAtLeast(old.updatedAtMillis),
+                resultSummary = summary.take(1024),
+            ).validated()
+            state.copy(journal = state.journal.toMutableList().also { it[index] = settled })
+        }
+
+    /**
+     * The user checked the device and accepts that the earlier actions may have run. Unblocks this
+     * credential's mutation lane without changing the recorded phase, and never resends anything.
+     */
+    fun acknowledgeUnresolved(host: ActiveHost): JournalUpdateResult = update { state ->
+        if (!samePairing(state.activeHost, host)) {
+            throw StateInvariantException(StateInvariantCode.STALE_GENERATION, "Selected pairing changed")
+        }
+        state.copy(journal = state.journal.map {
+            if (it.blocksLane && it.mayConflictWith(host)) it.copy(acknowledged = true) else it
+        })
     }
 
     /** Explicit local archival: terminal records or unresolved records the user acknowledged. */
@@ -426,7 +460,7 @@ class OperationJournal(
                 phase = phase,
                 operationId = operation.id,
                 updatedAtMillis = now.coerceAtLeast(entry.updatedAtMillis),
-                resultSummary = summary(operation.state, operation.outcome),
+                resultSummary = summary(operation.state, operation.outcome, operation.reason),
                 rejectionCode = operationFailureCode(phase, operation.outcome),
             )
         }
@@ -468,12 +502,16 @@ class OperationJournal(
         }
     }
 
-    private fun summary(state: WireValue<OperationState>, outcome: String?): String {
+    private fun summary(state: WireValue<OperationState>, outcome: String?, reason: String? = null): String {
         val label = when (state) {
             is WireValue.Unknown -> "unknown:${state.raw.take(64)}"
             is WireValue.Known -> state.value.name.lowercase()
         }
-        return listOfNotNull(label, outcome?.take(128)).joinToString(": ").take(1024)
+        // The host's own words for a failure (for example "Steam rejected display mode") are what lets the
+        // user tell a bad mode from a lost connection; strip control characters and bound them.
+        val hostReason = reason?.map { if (it.isISOControl()) ' ' else it }?.joinToString("")?.trim()?.take(160)
+            ?.takeIf { it.isNotEmpty() && state == WireValue.Known(OperationState.FAILED) }
+        return listOfNotNull(label, outcome?.take(128), hostReason).joinToString(": ").take(1024)
     }
 
     private fun canTransition(from: JournalPhase, to: JournalPhase): Boolean = when (from) {

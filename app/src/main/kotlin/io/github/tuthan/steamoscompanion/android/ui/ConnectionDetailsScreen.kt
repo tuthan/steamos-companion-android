@@ -2,6 +2,8 @@ package io.github.tuthan.steamoscompanion.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +42,9 @@ fun ConnectionDetailsScreen(
     onRevoke: () -> Unit,
     onForget: () -> Unit,
     onExport: () -> Unit,
+    wakeRelay: String = "",
+    suggestedWakeRelay: String = "",
+    onSaveWakeRelay: (String) -> Boolean = { false },
 ) {
     val palette = LocalCompanionPalette.current
     var replacementIntent by remember(StatusObservationSource.from(host)) { mutableStateOf<ReplacementIntent?>(null) }
@@ -60,6 +65,7 @@ fun ConnectionDetailsScreen(
     if (host.wakeTarget.available) {
         Kicker("Device", Modifier.padding(top = 8.dp))
         FactTable { FactRow("Wake target", host.wakeTarget.interfaceName ?: "Configured", divider = false) }
+        WakeRelayEditor(StatusObservationSource.from(host), wakeRelay, suggestedWakeRelay, busy, onSaveWakeRelay)
     }
 
     val candidate = state?.candidate?.takeIf { it.phase == CandidatePhase.APPROVED_STAGED }
@@ -79,7 +85,8 @@ fun ConnectionDetailsScreen(
     if (state?.journal.isNullOrEmpty()) StatusLine("No operations recorded", StatusTone.UNKNOWN)
     else WireLog(state.journal.takeLast(8).asReversed().map { entry ->
         WireLogEntry(if (entry.phase == JournalPhase.FAILED) WireDirection.BLOCKED else WireDirection.REQUEST,
-            "${entry.method} ${entry.path} · ${entry.phase.wireValue}${entry.rejectionCode?.let { " · ${it.wireValue}" } ?: ""}")
+            "${entry.method} ${entry.path} · ${entry.phase.wireValue}${entry.rejectionCode?.let { " · ${it.wireValue}" } ?: ""}" +
+                (entry.resultSummary?.takeIf { entry.phase == JournalPhase.FAILED }?.let { " · ${it.take(120)}" } ?: ""))
     })
     ActionRow(stringResource(R.string.ui_remove_pairing), enabled = !busy, icon = R.drawable.ic_key,
         secondary = "Revoke on the device or forget here", danger = true, navigates = true,
@@ -118,6 +125,27 @@ fun ConnectionDetailsScreen(
                 onConfirm = { removalChoice = null; onForget() },
             )
         }
+    }
+}
+
+@Composable
+private fun WakeRelayEditor(source: Any, saved: String, suggested: String, busy: Boolean,
+                            onSave: (String) -> Boolean) {
+    val start = saved.ifEmpty { suggested }
+    var text by remember(source, saved, suggested) { mutableStateOf(start) }
+    var result by remember(source, saved, suggested) { mutableStateOf<Boolean?>(null) }
+    val suggesting = saved.isEmpty() && suggested.isNotEmpty() && text.trim() == suggested
+    OutlinedTextField(text, onValueChange = { text = it.take(21); result = null },
+        label = { Text(stringResource(R.string.ui_wake_relay_label)) },
+        supportingText = { Text(stringResource(
+            if (suggesting) R.string.ui_wake_relay_suggested else R.string.ui_wake_relay_hint)) },
+        singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+    ActionRow(stringResource(R.string.ui_wake_relay_save), enabled = !busy && text.trim() != saved && (text.isNotBlank() || saved.isNotEmpty()),
+        onClick = { result = onSave(text) })
+    when (result) {
+        true -> StatusLine(stringResource(R.string.ui_wake_relay_saved), StatusTone.GOOD)
+        false -> StatusLine(stringResource(R.string.ui_wake_relay_invalid), StatusTone.WARNING)
+        null -> Unit
     }
 }
 

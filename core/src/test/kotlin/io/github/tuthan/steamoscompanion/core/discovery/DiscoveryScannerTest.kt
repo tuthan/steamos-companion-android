@@ -25,6 +25,13 @@ import org.junit.Test
 
 class DiscoveryScannerTest {
     @Test
+    fun targetBuilderSkipsTunnelPaths() {
+        val vpn = path("wg", "10.8.0.2", 24).copy(tunnel = true)
+        assertTrue(DiscoveryScanner.buildTargets(listOf(vpn)).targets.isEmpty())
+        assertEquals(253, DiscoveryScanner.buildTargets(listOf(path("wifi", "192.168.1.5", 24), vpn)).targets.size)
+    }
+
+    @Test
     fun targetBuilderUsesSelectedIpv4SubnetsSkipsSelfAndBoundsSubnetAndUniqueAddressWork() {
         val wifi = path("wifi", "192.168.1.5", 24)
         val targets = DiscoveryScanner.buildTargets(listOf(wifi))

@@ -13,6 +13,10 @@ data class LanPath(
     val addresses: List<InetAddress>,
     val broadcastAddresses: List<InetAddress>,
     val ipv4Subnets: List<Ipv4Subnet> = emptyList(),
+    /** An L3 VPN network: it carries no broadcast, so Wake needs a relay and discovery skips it. */
+    val tunnel: Boolean = false,
+    /** IPv4 next hops of this network's default routes; empty when none is known. */
+    val gateways: List<InetAddress> = emptyList(),
 )
 
 /** An IPv4 link address and prefix as reported by the selected LAN interface. */

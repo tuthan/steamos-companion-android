@@ -30,6 +30,9 @@ data class DisplayOperationCard(
     val pairingProven: Boolean,
     /** For order saves: the exact keys that were submitted, so a draft can wait for host readback. */
     val requestedKeys: List<String>? = null,
+    val blocksLane: Boolean = true,
+    /** The journal's result text; for a failure it ends with the host's own reason. */
+    val summary: String? = null,
 )
 
 /** Rebuilds the latest display operation card from durable journal and an independent status read. */
@@ -43,7 +46,7 @@ object DisplayOperationPresentation {
         val active = state.activeHost ?: return null
         if (StatusObservationSource.from(active) != StatusObservationSource.from(host)) return null
         val entry = state.journal.asSequence()
-            .filter { kind(it) != null && (it.belongsTo(active) || it.phase.unresolved && it.mayConflictWith(active)) }
+            .filter { kind(it) != null && (it.belongsTo(active) || it.blocksLane && it.mayConflictWith(active)) }
             .maxByOrNull { it.localGeneration } ?: return null
         val kind = kind(entry) ?: return null
         val proven = entry.belongsTo(active)
@@ -61,7 +64,7 @@ object DisplayOperationPresentation {
             }
         }
         return DisplayOperationCard(entry.localGeneration, kind, entry.phase, entry.operationId,
-            entry.rejectionCode, observed, proven, requestedKeys(entry, kind))
+            entry.rejectionCode, observed, proven, requestedKeys(entry, kind), entry.blocksLane, entry.resultSummary)
     }
 
     private fun observedFor(

@@ -246,6 +246,7 @@ class DiscoveryScanner(
             val skipped = mutableListOf<String>()
             var truncated = false
             for (path in paths) {
+                if (path.tunnel) continue
                 for (subnet in path.ipv4Subnets) {
                     val shape = subnet.shapeOrNull() ?: continue
                     val label = "${shape.networkAddress}/${subnet.prefixLength}"

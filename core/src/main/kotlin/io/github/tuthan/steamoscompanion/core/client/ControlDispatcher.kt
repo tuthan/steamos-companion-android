@@ -125,7 +125,7 @@ class ControlDispatcher(
         val outputs = read.outputs ?: return ControlBlock.PREVIEW_UNVERIFIED
         if (outputs.legacyShape || !outputs.available) return ControlBlock.PREVIEW_UNVERIFIED
         if (outputs.preview != null) return ControlBlock.PREVIEW_ACTIVE
-        if (state.journal.any { it.mayConflictWith(active) && it.phase.unresolved }) {
+        if (state.journal.any { it.mayConflictWith(active) && it.blocksLane }) {
             return ControlBlock.OPERATION_UNRESOLVED
         }
         return null

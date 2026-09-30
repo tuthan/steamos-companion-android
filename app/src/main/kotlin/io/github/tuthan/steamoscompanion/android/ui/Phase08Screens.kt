@@ -34,6 +34,7 @@ import io.github.tuthan.steamoscompanion.core.client.StatusPollState
 import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.wake.WakeAttemptState
+import io.github.tuthan.steamoscompanion.core.wake.WakeSendFailure
 import io.github.tuthan.steamoscompanion.core.wake.WakeSendResult
 
 @Composable
@@ -73,6 +74,7 @@ fun PowerScreen(host: ActiveHost, name: String, context: ActionContext, state: P
             onClick = { confirmation = PowerConfirmation.forHost(host, verb) })
     }
     feedback?.let { StatusLine(it.text, it.tone) }
+    LaneReviewRow(host, state)
     ControlCard(host, state, status, nowMonotonicNanos,
         include = { it != ControlOperationKind.SUNSHINE_RESTART }, onCheckOperation = onCheckOperation)
     val pending = confirmation
@@ -109,7 +111,7 @@ fun PowerScreen(host: ActiveHost, name: String, context: ActionContext, state: P
 
 @Composable
 fun WakeScreen(attempt: WakeAttemptState?, configured: Boolean, busy: Boolean,
-               onSend: () -> Unit) {
+               onSend: () -> Unit, target: io.github.tuthan.steamoscompanion.core.client.StoredWakeTarget? = null) {
     val palette = LocalCompanionPalette.current
     Text(stringResource(R.string.ui_wake_device), style = MaterialTheme.typography.headlineSmall,
         color = Color(palette.text.toInt()))
@@ -119,10 +121,27 @@ fun WakeScreen(attempt: WakeAttemptState?, configured: Boolean, busy: Boolean,
     if (attempt != null) {
         val packet = attempt.packet
         StatusLine(when (packet) {
-            is WakeSendResult.Sent -> "Wake packet sent"
+            is WakeSendResult.Sent -> if (packet.viaRelay) "Wake packet sent to the relay" else "Wake packet sent"
             is WakeSendResult.Partial -> "Wake packet sent to some network addresses"
-            is WakeSendResult.Failed -> stringResource(R.string.ui_wake_packet_failed)
-        }, if (packet is WakeSendResult.Failed) StatusTone.WARNING else StatusTone.GOOD)
+            is WakeSendResult.Failed -> stringResource(when (packet.reason) {
+                WakeSendFailure.RELAY_REQUIRED -> R.string.ui_wake_relay_required
+                WakeSendFailure.PERMISSION -> R.string.ui_wake_permission_missing
+                WakeSendFailure.NETWORK_MISSING -> R.string.ui_wake_network_missing
+                WakeSendFailure.TARGET_MISSING -> R.string.ui_wake_not_configured
+                WakeSendFailure.SEND_FAILED -> R.string.ui_wake_packet_failed
+            })
+        }, if (packet is WakeSendResult.Failed) StatusTone.WARNING else StatusTone.GOOD,
+            detail = when (packet) {
+                is WakeSendResult.Failed -> packet.detail
+                is WakeSendResult.Partial -> packet.detail
+                is WakeSendResult.Sent -> (if (packet.viaRelay) "Relay " else "To ") +
+                    packet.destinations.joinToString { it.hostAddress.orEmpty() } +
+                    (if (packet.viaRelay) ". It must re-broadcast the packet on the device's network." else "")
+            })
+        target?.mac?.takeIf { it.length == 12 && packet !is WakeSendResult.Failed }?.let { mac ->
+            StatusLine("For ${mac.chunked(2).joinToString(":")}", StatusTone.UNKNOWN,
+                detail = target.interfaceName?.takeIf { it.isNotBlank() }?.let { "Device network interface: $it" })
+        }
         StatusLine(when {
             attempt.authenticatedResponse -> stringResource(R.string.ui_device_connected)
             attempt.timedOut -> stringResource(R.string.ui_wake_no_response)
@@ -134,6 +153,9 @@ fun WakeScreen(attempt: WakeAttemptState?, configured: Boolean, busy: Boolean,
         }, glyph = if (attempt.authenticatedResponse) StatusGlyph.DOT else null)
         StatusLine(if (attempt.steamReady) "Steam ready" else "Steam readiness not confirmed",
             if (attempt.steamReady) StatusTone.GOOD else StatusTone.UNKNOWN)
+        if (attempt.timedOut && target?.interfaceName?.startsWith("wl") == true) {
+            StatusLine(stringResource(R.string.ui_wake_wifi_hint), StatusTone.UNKNOWN, glyph = StatusGlyph.INFO)
+        }
     }
     val canSend = configured && !busy && (attempt == null || attempt.timedOut || attempt.packet is WakeSendResult.Failed)
     PrimaryAction(if (attempt == null) stringResource(R.string.ui_wake_device)
@@ -162,6 +184,7 @@ fun SunshineScreen(state: WireValue<SunshineState>?, context: ActionContext, hos
         reason = if (busy) "Request in progress" else allowed.block?.let(::blockReason), icon = R.drawable.ic_replay,
         onClick = onRecover)
     feedback?.let { StatusLine(it.text, it.tone) }
+    LaneReviewRow(host, persisted)
     ControlCard(host, persisted, status, nowMonotonicNanos,
         include = { it == ControlOperationKind.SUNSHINE_RESTART }, onCheckOperation = onCheckOperation)
 }
@@ -173,14 +196,26 @@ private fun ControlCard(host: ActiveHost, state: PersistentState?, status: Statu
     val card = state?.let { ControlOperationPresentation.project(host, it, status, nowMonotonicNanos) }
         ?.firstOrNull { include(it.kind) } ?: return
     Kicker("Latest control operation")
-    StatusLine("Request: ${card.kind.name.replace('_', ' ').lowercase()} · ${card.phase.wireValue}",
+    val hostReturned = card.phase == io.github.tuthan.steamoscompanion.core.client.JournalPhase.OBSERVED_RETURN &&
+        !card.blocksLane
+    StatusLine("Request: ${card.kind.name.replace('_', ' ').lowercase()} · " +
+        (if (hostReturned) "accepted by the device" else card.phase.wireValue),
         if (card.phase == io.github.tuthan.steamoscompanion.core.client.JournalPhase.FAILED)
             StatusTone.WARNING else StatusTone.UNKNOWN)
+    val restarting = card.kind == ControlOperationKind.RESTART && card.blocksLane && card.operationId != null &&
+        card.phase != io.github.tuthan.steamoscompanion.core.client.JournalPhase.FAILED &&
+        card.phase != io.github.tuthan.steamoscompanion.core.client.JournalPhase.SUCCEEDED
+    if (restarting) StatusLine("Restarting. Waiting for the device to come back…", StatusTone.PENDING,
+        glyph = StatusGlyph.PENDING, detail = "The app keeps checking; nothing is sent again")
+    val settled = card.summary?.takeIf { card.phase == io.github.tuthan.steamoscompanion.core.client.JournalPhase.SUCCEEDED }
+    if (settled != null) StatusLine(settled, StatusTone.GOOD, glyph = StatusGlyph.CHECK)
     StatusLine("Observed: ${controlObservationLabel(card.observed)}",
         if (card.observed == ControlObservation.CONNECTION_LOST) StatusTone.WARNING else StatusTone.UNKNOWN)
-    if (card.phase.unresolved) ActionRow("Check result", enabled = card.operationId != null,
-        reason = if (card.operationId == null) "No operation ID was returned; review the host" else null,
-        icon = R.drawable.ic_status_question, onClick = onCheckOperation)
+    if (card.phase.unresolved && card.blocksLane) {
+        ActionRow("Check result", enabled = card.operationId != null,
+            reason = if (card.operationId == null) "No operation ID was returned; review the host" else null,
+            icon = R.drawable.ic_status_question, onClick = onCheckOperation)
+    }
 }
 
 private fun controlObservationLabel(value: ControlObservation): String = when (value) {

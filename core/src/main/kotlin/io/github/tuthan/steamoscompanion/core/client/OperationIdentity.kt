@@ -16,6 +16,22 @@ internal fun JournalEntry.belongsTo(host: ActiveHost): Boolean {
     return MessageDigest.isEqual(expected.toByteArray(Charsets.US_ASCII), actual.toByteArray(Charsets.US_ASCII))
 }
 
+/**
+ * An unresolved entry blocks new mutations until the host settles it or the user marks it reviewed.
+ * Some entries can never settle: no operation ID was returned, the host pruned the record (404), or a
+ * legacy entry lacks credential provenance and cannot be looked up.
+ */
+internal val JournalEntry.blocksLane: Boolean get() = phase.unresolved && !acknowledged && !hostReturnedPower
+
+/**
+ * The host ends a power request at `observed_return` for good ("Steam returned; the physical transition
+ * is not confirmed") and does not count it as an active operation, so its own mutation lane is free.
+ * Holding this client's lane open for it locked display and order changes after every Suspend or Restart.
+ * The Power card still reports the request and what the next status read observes.
+ */
+internal val JournalEntry.hostReturnedPower: Boolean
+    get() = phase == JournalPhase.OBSERVED_RETURN && path == ApiRoute.POWER.path
+
 /** A legacy entry may be from this credential; keep its unresolved mutation lane conservative. */
 internal fun JournalEntry.mayConflictWith(host: ActiveHost): Boolean {
     if (hostId != host.hostId || clientId != host.clientId || originalEndpoint != host.endpoint ||
@@ -27,11 +43,11 @@ internal fun JournalEntry.mayConflictWith(host: ActiveHost): Boolean {
 /** UI-safe questions about the exact credential's mutation lane; no bearer value is exposed. */
 object OperationLanePresentation {
     fun hasUnresolved(host: ActiveHost, state: PersistentState): Boolean =
-        state.journal.any { it.phase.unresolved && it.mayConflictWith(host) }
+        state.journal.any { it.blocksLane && it.mayConflictWith(host) }
 
     fun hasUnresolvedOtherThanPreview(host: ActiveHost, state: PersistentState, previewId: String): Boolean =
         state.journal.any { entry ->
-            entry.phase.unresolved && entry.mayConflictWith(host) &&
+            entry.blocksLane && entry.mayConflictWith(host) &&
                 !(entry.path == ApiRoute.DISPLAY_PREVIEW.path && entry.operationId == previewId && entry.belongsTo(host))
         }
 

@@ -9,13 +9,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import io.github.tuthan.steamoscompanion.android.CompanionRuntime
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
+import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
+import io.github.tuthan.steamoscompanion.core.client.JournalUpdateResult
+import io.github.tuthan.steamoscompanion.core.client.PowerVerb
 import io.github.tuthan.steamoscompanion.core.client.ControlBlock
 import io.github.tuthan.steamoscompanion.core.client.ControlDispatchResult
 import io.github.tuthan.steamoscompanion.core.client.JournalDispatchResult
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.PowerConfirmation
 import io.github.tuthan.steamoscompanion.core.client.StatusPollState
+import io.github.tuthan.steamoscompanion.core.ports.HostPaths
 import io.github.tuthan.steamoscompanion.core.wake.WakeSendFailure
+import io.github.tuthan.steamoscompanion.core.wake.WakeSender
 import io.github.tuthan.steamoscompanion.core.wake.WakeSendResult
 import java.util.concurrent.Executors
 
@@ -35,7 +40,15 @@ class Phase08ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
 
     fun power(host: ActiveHost, confirmation: PowerConfirmation, observation: StatusPollState) {
         execute {
-            runtime.controlDispatcher.power(host, confirmation, observation, runtime.mutationSender).message()
+            runtime.controlDispatcher.power(host, confirmation, observation, runtime.mutationSender)
+                .message(restart = confirmation.verb == PowerVerb.RESTART)
+        }
+    }
+
+    fun acknowledgeUnresolved(host: ActiveHost) = execute {
+        when (runtime.operationJournal.acknowledgeUnresolved(host)) {
+            JournalUpdateResult.Saved -> "Marked as reviewed; actions are available again" to StatusTone.GOOD
+            else -> "Could not mark the operation as reviewed" to StatusTone.WARNING
         }
     }
 
@@ -51,14 +64,13 @@ class Phase08ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         worker.execute {
             val packet = try {
                 val paths = runtime.networkAccess.activeLanPaths()
-                val path = paths.firstOrNull { it.interfaceName == host.wakeTarget.interfaceName }
-                    ?: paths.firstOrNull()
-                if (path == null) WakeSendResult.Failed(WakeSendFailure.NETWORK_MISSING)
-                else runtime.wakeSender.send(host.wakeTarget, path.id)
+                val candidates = HostPaths.candidates(paths, host.endpoint, host.wakeTarget.interfaceName)
+                if (candidates.isEmpty()) WakeSendResult.Failed(WakeSendFailure.NETWORK_MISSING)
+                else runtime.wakeSender.send(host.wakeTarget, candidates, runtime.wakeRelayStore.get(host))
             } catch (_: SecurityException) {
                 WakeSendResult.Failed(WakeSendFailure.PERMISSION)
-            } catch (_: RuntimeException) {
-                WakeSendResult.Failed(WakeSendFailure.SEND_FAILED)
+            } catch (error: RuntimeException) {
+                WakeSendResult.Failed(WakeSendFailure.SEND_FAILED, WakeSender.describe(error))
             }
             main.post {
                 busy = false
@@ -81,7 +93,7 @@ class Phase08ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         }
     }
 
-    private fun ControlDispatchResult.message(): Pair<String, StatusTone> = when (this) {
+    private fun ControlDispatchResult.message(restart: Boolean = false): Pair<String, StatusTone> = when (this) {
         is ControlDispatchResult.Blocked -> when (reason) {
             ControlBlock.STATUS_NOT_FRESH -> "Check the latest device status before sending" to StatusTone.WARNING
             ControlBlock.PREVIEW_ACTIVE, ControlBlock.PREVIEW_UNVERIFIED ->
@@ -98,6 +110,11 @@ class Phase08ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
             is JournalDispatchResult.Finished -> when (outcome.entry.phase) {
                 JournalPhase.FAILED -> "The host rejected the request" to StatusTone.WARNING
                 JournalPhase.SUCCEEDED -> "Operation reported complete; checking device state" to StatusTone.GOOD
+                // The host acknowledges a power request and Steam then carries it out; the device may drop off now.
+                JournalPhase.ACCEPTED, JournalPhase.DISPATCHED, JournalPhase.OBSERVED_RETURN ->
+                    if (outcome.entry.path == ApiRoute.POWER.path) (if (restart) "The device accepted the request. Waiting for it to restart and come back…"
+                        else "The device accepted the request. It may disconnect now.") to StatusTone.GOOD
+                    else "Request recorded; checking operation result" to StatusTone.UNKNOWN
                 else -> "Request recorded; checking operation result" to StatusTone.UNKNOWN
             }
             is JournalDispatchResult.ResultNotConfirmed -> "Result not confirmed; check the operation" to StatusTone.WARNING

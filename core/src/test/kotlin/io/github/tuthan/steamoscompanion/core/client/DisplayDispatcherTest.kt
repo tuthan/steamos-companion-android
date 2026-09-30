@@ -440,6 +440,55 @@ class DisplayDispatcherTest {
             dispatcher.resetOrder(host, observed, sender))
     }
 
+    @Test fun markingUnresolvedOperationsReviewedUnblocksTheLaneWithoutChangingTheRecordedPhase() {
+        repository.transact { it.copy(activeHost = host) }
+        val observed = observation(order = order("saved-order"))
+        val keys = listOf("drm:card0:HDMI-A-1", "drm:card0:DP-1", "drm:card0:eDP-1")
+        val confirmation = OrderRestartConfirmation(StatusObservationSource.from(host), keys, 1)
+        // A lost reply leaves no operation ID, so a host lookup can never settle it.
+        dispatcher.saveOrderAndRestart(host, observed, confirmation,
+            JournalMutationSender { _, _, _ -> RequestOutcome.Unknown(TransportFailure.IO) })
+        assertEquals(DisplayDispatchResult.Blocked(DisplayBlock.OPERATION_UNRESOLVED),
+            dispatcher.saveOrder(host, observed, keys, 1, noReply))
+
+        assertEquals(JournalUpdateResult.Saved, journal.acknowledgeUnresolved(host))
+
+        val state = (repository.load() as StateLoadResult.Ready).state
+        assertEquals(JournalPhase.UNKNOWN, state.journal.single().phase)
+        assertTrue(state.journal.single().acknowledged)
+        assertFalse(OperationLanePresentation.hasUnresolved(host, state))
+        var sends = 0
+        val next = dispatcher.saveOrder(host, observed, keys, 1, JournalMutationSender { _, _, _ ->
+            sends++; RequestOutcome.NotSent(TransportFailure.IO)
+        })
+        assertTrue(next is DisplayDispatchResult.Dispatched)
+        assertEquals(1, sends)
+    }
+
+    @Test fun reviewedLegacyEntryNoLongerBlocksOrShowsAPendingCard() {
+        val request = ApiRequest(HttpMethod.POST, ApiRoute.DISPLAY_PREVIEW.path,
+            jsonObject("request_id" to JsonValue.StringValue("legacy-preview"),
+                "output_id" to JsonValue.StringValue("1"), "mode_id" to JsonValue.StringValue("2"),
+                "generation" to JsonValue.NumberValue("4")), host.bearerToken)
+        val legacy = JournalEntry.create(1, host, request, BoundedJson.encode(request.body!!), 100)
+            .copy(originalPairedAtMillis = null, originalBearerSha256 = null, phase = JournalPhase.UNKNOWN)
+        repository.transact { it.copy(activeHost = host, journal = listOf(legacy)) }
+        assertTrue(OperationLanePresentation.hasUnresolved(host, (repository.load() as StateLoadResult.Ready).state))
+
+        assertEquals(JournalUpdateResult.Saved, journal.acknowledgeUnresolved(host))
+
+        val state = (repository.load() as StateLoadResult.Ready).state
+        assertEquals(PreviewPresentation.None,
+            DisplayRecoveryPresentation.project(host, state, StatusPollState(), 2_000_000_000L))
+        assertEquals(null, DisplayOperationPresentation.latest(host, state, StatusPollState(), 2_000_000_000L))
+    }
+
+    @Test fun markingReviewedRejectsAChangedPairing() {
+        repository.transact { it.copy(activeHost = host) }
+        assertEquals(JournalUpdateResult.Rejected(StateInvariantCode.STALE_GENERATION),
+            journal.acknowledgeUnresolved(host.copy(clientId = "another-client")))
+    }
+
     @Test fun orderChangesWaitForAnActivePreview() {
         repository.transact { it.copy(activeHost = host) }
         val observed = observation(outputs("with-active-preview"), order = order("saved-order"))

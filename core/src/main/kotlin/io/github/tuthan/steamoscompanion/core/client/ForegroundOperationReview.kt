@@ -23,6 +23,8 @@ class ForegroundOperationReview(
     private var closed = false
     private var lastEndedPreviewSweep = Long.MIN_VALUE / 2
     private val endedPreviewAttempts = HashMap<Long, Int>()
+    private var lastOpenSweep = Long.MIN_VALUE / 2
+    private val openAttempts = HashMap<Long, Int>()
 
     fun start() {
         synchronized(lock) {
@@ -60,6 +62,37 @@ class ForegroundOperationReview(
         }
     }
 
+    /**
+     * Async host operations (restore, revert, Sunshine restart) reply `accepted` and finish a moment later.
+     * Until the app asked again, that entry blocked every other action. Ask every few seconds while the
+     * paired screen is visible, a bounded number of times per entry. Read-only GETs; nothing is replayed.
+     */
+    fun reviewOpenOperations(nowNanos: Long) {
+        synchronized(lock) {
+            val cancellation = signal ?: return
+            if (closed || running?.isDone == false || nowNanos - lastOpenSweep < OPEN_INTERVAL_NANOS) return
+            lastOpenSweep = nowNanos
+            val cycle = generation
+            running = worker.submit { sweepOpenOperations(cycle, cancellation) }
+        }
+    }
+
+    private fun sweepOpenOperations(cycle: Long, cancellation: CancellationSignal) {
+        val entries = (repository.load() as? StateLoadResult.Ready)?.state?.journal.orEmpty()
+            .filter { it.blocksLane && it.operationId != null && it.path != ApiRoute.DISPLAY_PREVIEW.path &&
+                it.belongsTo(host) }
+            .map { it.localGeneration }
+            .filter { synchronized(lock) { openAttempts.merge(it, 1, Int::plus)!! } <= MAX_OPEN_ATTEMPTS }
+        for (localGeneration in entries) {
+            if (cancellation.isCancelled) return
+            val result = reconciler.reconcile(host, localGeneration, cancellation)
+            if (cancellation.isCancelled) return
+            synchronized(lock) {
+                if (!closed && signal === cancellation && generation == cycle) listener(localGeneration, result)
+            }
+        }
+    }
+
     private fun sweepEndedPreviews(cycle: Long, cancellation: CancellationSignal) {
         val entries = (repository.load() as? StateLoadResult.Ready)?.state?.journal.orEmpty()
             .filter { it.phase.unresolved && it.operationId != null && it.path == ApiRoute.DISPLAY_PREVIEW.path &&
@@ -93,6 +126,8 @@ class ForegroundOperationReview(
     private companion object {
         const val ENDED_PREVIEW_INTERVAL_NANOS = 4_000_000_000L
         const val MAX_ENDED_PREVIEW_ATTEMPTS = 6
+        const val OPEN_INTERVAL_NANOS = 3_000_000_000L
+        const val MAX_OPEN_ATTEMPTS = 20
     }
 
     override fun close() {
