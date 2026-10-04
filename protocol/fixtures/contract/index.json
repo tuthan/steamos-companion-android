@@ -1066,6 +1066,30 @@
       "error": "unauthorized"
     },
     {
+      "case": "operations/list-empty",
+      "file": "operations/list-empty.json",
+      "method": "GET",
+      "path": "/v1/operations",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/list-mixed",
+      "file": "operations/list-mixed.json",
+      "method": "GET",
+      "path": "/v1/operations",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "operations/list-unauthorized",
+      "file": "operations/list-unauthorized.json",
+      "method": "GET",
+      "path": "/v1/operations",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
       "case": "unsupported/unknown-path-post",
       "file": "unsupported/unknown-path-post.json",
       "method": "POST",

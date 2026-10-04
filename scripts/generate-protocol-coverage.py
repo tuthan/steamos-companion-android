@@ -33,6 +33,7 @@ TEST_CLASS = {
     "power": ("PowerContractTest", ""),
     "sunshine-restart": ("SunshineContractTest", ""),
     "operations": ("OperationContractTest", ""),
+    "operations/list": ("OperationListContractTest", ""),
     "unsupported": ("RouteContractTest", ""),
 }
 
@@ -52,6 +53,13 @@ def camel(*parts: str) -> str:
     return words[0].lower() + "".join(w[:1].upper() + w[1:] for w in words[1:])
 
 
+def test_class(area: str, name: str) -> tuple[str, str]:
+    """The list cases share the operations/ directory with the by-id cases but have their own class."""
+    if area == "operations" and name.startswith("list-"):
+        return TEST_CLASS["operations/list"]
+    return TEST_CLASS[area]
+
+
 def route(area: str, method: str, path: str) -> str:
     if area == "unsupported":
         return "unsupported"
@@ -65,12 +73,12 @@ def main() -> None:
     rows = []
     for case in index:
         area, name = case["case"].split("/", 1)
-        test_class, prefix = TEST_CLASS[area]
+        class_name, prefix = test_class(area, name)
         fixture = json.loads((PROTOCOL / "fixtures/contract" / case["file"]).read_text(encoding="utf-8"))
         outcome = case["error"] or "success"
         detail = fixture.get("description", "").replace("|", "\\|")
         rows.append((route(area, case["method"], case["path"]), f"{name} ({outcome}) — {detail}", case["status"],
-                     f"fixtures/contract/{case['file']}", f"{test_class}.{camel(prefix, name) if prefix else camel(name)}"))
+                     f"fixtures/contract/{case['file']}", f"{class_name}.{camel(prefix, name) if prefix else camel(name)}"))
     rows += LEGACY
     rows.sort(key=lambda r: (r[0] == "unsupported", r[0], r[2], r[1]))
 

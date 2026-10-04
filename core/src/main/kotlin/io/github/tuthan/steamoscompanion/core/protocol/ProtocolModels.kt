@@ -20,6 +20,8 @@ enum class ApiRoute(
     DISPLAY_ORDER(HttpMethod.GET, "/v1/display/order", true),
     DRM(HttpMethod.GET, "/v1/drm", true),
     OPERATION(HttpMethod.GET, "/v1/operations/{id}", true),
+    /** The bounded operation journal. Exact path only: no query string, no body, GET only. */
+    OPERATION_LIST(HttpMethod.GET, "/v1/operations", true),
     POWER(HttpMethod.POST, "/v1/power", true),
     DISPLAY_ORDER_SET(HttpMethod.POST, "/v1/display/order", true),
     DISPLAY_ORDER_AUTOMATIC(HttpMethod.POST, "/v1/display/order/automatic", true),
@@ -45,6 +47,7 @@ enum class ApiRoute(
                 method == HttpMethod.GET && path == DISPLAY_OUTPUTS.path -> DISPLAY_OUTPUTS
                 method == HttpMethod.GET && path == DISPLAY_ORDER.path -> DISPLAY_ORDER
                 method == HttpMethod.GET && path == DRM.path -> DRM
+                method == HttpMethod.GET && path == OPERATION_LIST.path -> OPERATION_LIST
                 method == HttpMethod.GET && path.startsWith("/v1/operations/") -> OPERATION
                 method == HttpMethod.POST && path == POWER.path -> POWER
                 method == HttpMethod.POST && path == DISPLAY_ORDER_SET.path -> DISPLAY_ORDER_SET
@@ -321,6 +324,8 @@ sealed interface VersionedPayload {
     /** Advisory DRM link facts; [facts] is null when the host sends nothing usable. Never persisted. */
     data class Drm(val facts: LinkFacts?) : VersionedPayload
     data class Operation(val operation: OperationSummary) : VersionedPayload
+    /** The host operation journal; [journal] is null when the host sends no usable list. Never persisted. */
+    data class OperationList(val journal: HostJournal?) : VersionedPayload
     data class Mutation(
         val operation: OperationSummary?,
         val body: JsonValue.ObjectValue,

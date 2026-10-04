@@ -88,6 +88,8 @@ object ProtocolCodec {
         // Advisory: a block that is absent, malformed or oversize is "no facts", never a failed read.
         ApiRoute.DRM -> VersionedPayload.Drm(LinkFactsDecoder.decode(body["drm"]))
         ApiRoute.OPERATION -> VersionedPayload.Operation(parseOperation(body["operation"].asObject("operation")))
+        // Diagnostic: a list that is absent, malformed or over the schema bound is "no journal", never a failed read.
+        ApiRoute.OPERATION_LIST -> VersionedPayload.OperationList(HostJournalDecoder.decode(body["operations"]))
         else -> VersionedPayload.Mutation(
             operation = (body["operation"] as? JsonValue.ObjectValue)?.let(::parseOperation),
             body = body,

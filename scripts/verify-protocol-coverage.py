@@ -18,7 +18,8 @@ KOTLIN_TESTS = ROOT / "core" / "src" / "test" / "kotlin"
 INDEX = "fixtures/contract/index.json"  # the fixture catalogue itself, not a case
 STANDALONE_FIXTURES = {
     "fixtures/pairing-payload.json": ("PairingModelsTest", "hostBundledQrPayloadFixtureParsesWithTheAndroidClientValidator"),
-    # GET /v1/operations (list) is pinned for the decoder only; the Android client never calls it.
+    # The legacy v0.5.18 body of GET /v1/operations (list), decoded by the per-operation decoder. The route itself
+    # is covered by the generated operations/list-* contract cases.
     "fixtures/operations-list.json": ("ProtocolValidationTest", "hostOperationListFixtureEntriesParseWithTheOperationDecoder"),
 }
 
@@ -32,6 +33,7 @@ PINNED_ROUTES = {
     "GET /v1/display/outputs",
     "GET /v1/display/order",
     "GET /v1/drm",
+    "GET /v1/operations",
     "GET /v1/operations/{id}",
     "POST /v1/power",
     "POST /v1/display/order",

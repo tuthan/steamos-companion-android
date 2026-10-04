@@ -1,8 +1,8 @@
 {
   "branch": "main",
-  "commit": "10dc42216f8a2d1bfa8059f38120cc087f4a5dc4",
+  "commit": "f6aa3845fb5a2716e1beb36d317663a88706d500",
   "files": {
-    "README.md": "1dfc4c499c7fcce0c8f52324ecb9909f9e63b4907eeb8d5632d7f1e8ee53e1d0",
+    "README.md": "ea8a7b656cf0f46b265b33ec09f080648c23df6eb50581112b4a5221c6ef8f42",
     "fixtures/contract/discovery/ready.json": "3591c0548215e59eac8c0e61f4794e83d1a491cfd4228a446120113c238d192f",
     "fixtures/contract/discovery/tls-unavailable.json": "ae4944c0df16e607dadecebf2b25bec83373dc557a1dd3fb160eb3f062bbea3b",
     "fixtures/contract/display-confirm/confirmed.json": "5a4f08ea393161b9d2cbfb72be8f1c8713dfa6fff6dd524a1e0cb208cae80f35",
@@ -59,11 +59,14 @@
     "fixtures/contract/drm/bridge-unavailable.json": "c5ce325ab76bf4fc4eff3155eb0f990ef4478360e2681aa422c1422a8fa77350",
     "fixtures/contract/drm/no-connectors.json": "0e98a1c408cb3c1f3c835e4c21fc81f42223001f0212531954771a78fe84da3d",
     "fixtures/contract/drm/unauthorized.json": "696dd8ee282d0f9db1bb9780359dfaa7bf58f064092136593f0d648b103a2cff",
-    "fixtures/contract/index.json": "48ca1b6e98e0aa6d2ea21bfb688ce2a8db954c1aa3ce66f68c4b5939ec48bd9b",
+    "fixtures/contract/index.json": "7bffdfbdf31ca7e3f3cc2f7c76bfeee490f87aff4ee28792810802a691b05cc2",
     "fixtures/contract/operations/accepted.json": "35b0d6c2336f66e631e9cdf3f42baf4e4c4734d85b4d897dcc8c58ef13ab0b60",
     "fixtures/contract/operations/display-preview-observed-return.json": "5d5bcc35eeab268bb370b41cc2ca65183e20c57f6164d35a9528289732c76bcf",
     "fixtures/contract/operations/display-restore-succeeded.json": "95389977f7ec6682ceb2dd91804e2c298e9d6203f8f1aae12549c1873de06c47",
     "fixtures/contract/operations/invalid-id.json": "896f257e481e5e9ed432afebacb072ea400e294f6e2e509cf306272013d0a8c5",
+    "fixtures/contract/operations/list-empty.json": "97a8e1c9b081725da688dbe986235e7b04b2bd6eba056432da34d0f40159034e",
+    "fixtures/contract/operations/list-mixed.json": "45f603d9426d29de1105be02651ebe93ff328f211ff55045b22ed97bc9954bb4",
+    "fixtures/contract/operations/list-unauthorized.json": "62a69d81a8f3cce20c4ef6d1c65cf077f7bdf816e4569c6ac884fc639326bd21",
     "fixtures/contract/operations/not-found-missing.json": "988fcab6c6c93ba19700026bfda0eee4b9a327dbb41d3bd499d5902a2c6dcf54",
     "fixtures/contract/operations/not-found-owned-by-other.json": "ce084345b686d8cc11753a811ad8817bd132ee2a299e541e73c0cd71e2726382",
     "fixtures/contract/operations/power-failed.json": "6408be0727452c7d42202c34561db5e2e083a387aad8509d650d198a387f3317",
@@ -154,10 +157,11 @@
     "fixtures/status-sunshine-running.json": "0e62ff74c77127a3c9bba76318c2aeb3bc2312c620daa327296a05ebcd210823",
     "fixtures/status-sunshine-stopped.json": "b57b9a4e1438907bc70bc59dd80ff9e2287537c87c7b92b216c3dffde30754ee",
     "fixtures/status-sunshine-unknown.json": "54cb9ca7d0d0529a51b26ac76d6468092ae029f731d4b39e8eddfe0f70776a59",
-    "schema.json": "17485603a5f1058ea67e3543ae817d5ed870a4445aa4064a3d581a0e00bdac8c"
+    "operation-vocabulary.json": "7ca3197bf1edcf9b41deca1087db5ab42025f25484f4eee2cbd28d9478242438",
+    "schema.json": "58465049a1f9ee3506a653fb87f710abfa264da7c447face4e910009ceec81fe"
   },
-  "host_behavior": "main@10dc422 (v0.5.18 release f4d4c57ef1e9d4d34e72d6eb44195b510c9aa86b plus the unreleased self_check block and GET /v1/drm); host/backend changed only by selfcheck.py, linkfacts.py and their wiring (identity.py, coordinator.py, service.py, client.py, client_core.py)",
-  "protocol_tree": "57fc21a5700d3e5b88fb9badb6671fcaa7c2688f",
+  "host_behavior": "main@f6aa384 (v0.5.18 release f4d4c57ef1e9d4d34e72d6eb44195b510c9aa86b plus the unreleased self_check block and GET /v1/drm, and a fix to GET /v1/operations so the Deck's own display records, owner decky-local, reach clients); host/backend changed only by selfcheck.py, linkfacts.py and their wiring (identity.py, coordinator.py, service.py, client.py, client_core.py); the list fix is service.py operation_list; host/main.py and the frontend are not part of the protocol",
+  "protocol_tree": "7945871bde18a74da188c07799fc2fa6eaeca4cb",
   "repository": "https://github.com/tuthan/steamos-companion-decky",
   "tag": null
 }

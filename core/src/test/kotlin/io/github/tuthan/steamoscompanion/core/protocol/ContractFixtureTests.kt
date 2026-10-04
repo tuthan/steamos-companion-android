@@ -89,6 +89,12 @@ class OperationContractTest {
     @Test fun unauthorized() = ProtocolFixtureAssertions.assertContractFixture("operations/unauthorized")
 }
 
+class OperationListContractTest {
+    @Test fun listEmpty() = ProtocolFixtureAssertions.assertContractFixture("operations/list-empty")
+    @Test fun listMixed() = ProtocolFixtureAssertions.assertContractFixture("operations/list-mixed")
+    @Test fun listUnauthorized() = ProtocolFixtureAssertions.assertContractFixture("operations/list-unauthorized")
+}
+
 class PairingCancelContractTest {
     @Test fun afterDelivery() = ProtocolFixtureAssertions.assertContractFixture("pair-cancel/after-delivery")
     @Test fun afterExpiry() = ProtocolFixtureAssertions.assertContractFixture("pair-cancel/after-expiry")
