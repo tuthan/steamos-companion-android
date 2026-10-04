@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.tuthan.steamoscompanion.R
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.CandidatePhase
+import io.github.tuthan.steamoscompanion.core.client.HostAccessPresentation
 import io.github.tuthan.steamoscompanion.core.client.HostHealthUnavailableReason
 import io.github.tuthan.steamoscompanion.core.client.HostHealthView
 import io.github.tuthan.steamoscompanion.core.client.HostJournalState
@@ -67,6 +70,7 @@ fun ConnectionDetailsScreen(
     MonoValue(host.endpoint)
     Kicker("Identity", Modifier.padding(top = 8.dp))
     InfoCard("Certificate pinned", "", icon = R.drawable.ic_lock) { MonoValue(host.certificatePin) }
+    HostAccessSection(host.grantedScopes)
     Kicker("Granted permissions", Modifier.padding(top = 8.dp))
     ScopeBadges(host.grantedScopes.toList(), granted = true)
     val fresh = status.source == StatusObservationSource.from(host) && status.lastRead != null &&
@@ -139,6 +143,23 @@ fun ConnectionDetailsScreen(
                 onConfirm = { removalChoice = null; onForget() },
             )
         }
+    }
+}
+
+/**
+ * What this pairing may do on the host, in the host's own words: a role, then the permissions held, and a note when it
+ * is not full access because the owner of the host chose that and can change it there. [scopes] is the stored pairing's
+ * current value, replaced on every status read by what the host reports.
+ */
+@Composable
+internal fun HostAccessSection(scopes: List<String>) {
+    val palette = LocalCompanionPalette.current
+    val view = remember(scopes) { HostAccessPresentation.view(scopes) }
+    Kicker("Access on this host", Modifier.padding(top = 8.dp))
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(view.line, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+            color = Color(palette.text.toInt()))
+        view.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Color(palette.textDim.toInt())) }
     }
 }
 
