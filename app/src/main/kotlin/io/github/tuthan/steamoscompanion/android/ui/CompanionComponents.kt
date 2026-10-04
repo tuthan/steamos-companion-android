@@ -403,7 +403,7 @@ private fun countdownText(text: String, color: Color): AnnotatedString = buildAn
 fun PreviewCard(mode: String, remainingSeconds: Long?, status: String,
                 canRevert: Boolean, canKeep: Boolean, onRevert: () -> Unit, onKeep: () -> Unit,
                 modifier: Modifier = Modifier, deviceName: String? = null, question: String? = null,
-                totalSeconds: Long? = null, revertReason: String? = null) {
+                totalSeconds: Long? = null, revertReason: String? = null, keepReason: String? = null) {
     val palette = LocalCompanionPalette.current
     val shape = RoundedCornerShape(CompanionShapes.DEVICE_FRAME_DP.dp)
     val urgent = remainingSeconds != null && remainingSeconds <= CompanionMotion.PREVIEW_AMBER_LAST_SECONDS
@@ -428,6 +428,8 @@ fun PreviewCard(mode: String, remainingSeconds: Long?, status: String,
             ActionRow("Revert now", enabled = canRevert,
                 reason = revertReason ?: if (canRevert) null else "Preview ownership is unconfirmed", onClick = onRevert)
             PrimaryAction("Keep and save", enabled = canKeep, green = true, icon = R.drawable.ic_check, onClick = onKeep)
+            if (!canKeep && !keepReason.isNullOrBlank()) Text(keepReason, style = MaterialTheme.typography.bodyMedium,
+                color = Color(palette.textDim.toInt()))
         }
     }
 }

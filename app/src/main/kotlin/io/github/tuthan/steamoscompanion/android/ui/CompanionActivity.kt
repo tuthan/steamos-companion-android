@@ -440,9 +440,10 @@ private fun CompanionRoot(
                     onFailure = { /* Scanner failure remains local; user can paste or retry. */ })
                 UiDestination.REMOTE_OVERVIEW -> {
                     if (host == null) OnboardingScreen(onNavigate, permissionMessage)
-                    else OverviewScreen(persisted?.activeHost ?: host, persisted, status, runtime,
-                        displayBusy, onNavigate, onRestore, onRevert, onKeep, onCheckStatus,
-                        onCheckOperation)
+                    else OverviewScreen(persisted?.activeHost ?: host, persisted, status,
+                        runtime.aliasStore.get(persisted?.activeHost ?: host) ?: host.endpoint,
+                        runtime.clock.monotonicNanos(), displayBusy, onNavigate, onRestore, onRevert, onKeep,
+                        onCheckStatus, onCheckOperation)
                 }
                 UiDestination.DISPLAY, UiDestination.DISPLAY_ORDER -> if (host != null) DisplayScreen(
                     persisted?.activeHost ?: host, persisted, status, runtime.clock.monotonicNanos(),
@@ -484,7 +485,7 @@ private fun CompanionRoot(
     }
 }
 
-private fun actionContext(host: ActiveHost, state: PersistentState?, status: StatusPollState): ActionContext {
+internal fun actionContext(host: ActiveHost, state: PersistentState?, status: StatusPollState): ActionContext {
     val read = status.lastRead?.takeIf { status.source == StatusObservationSource.from(host) }
     val preview = read?.outputs?.preview
     val owner = when {
@@ -552,8 +553,8 @@ private fun OnboardingScreen(onNavigate: (UiDestination) -> Unit, permissionMess
 }
 
 @Composable
-private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status: StatusPollState,
-                           runtime: CompanionRuntime, busy: Boolean,
+internal fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status: StatusPollState,
+                           name: String, nowMonotonicNanos: Long, busy: Boolean,
                            onNavigate: (UiDestination) -> Unit,
                            onRestore: (String) -> Unit,
                            onRevert: () -> Unit,
@@ -564,7 +565,6 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
     var keepConfirmation by remember(StatusObservationSource.from(host)) {
         mutableStateOf<KeepPreviewConfirmation?>(null)
     }
-    val name = runtime.aliasStore.get(host) ?: host.endpoint
     val (headline, tone, glyph) = when (status.headline) {
         StatusHeadline.CONNECTED -> Triple(stringResource(R.string.ui_status_connected_now), StatusTone.GOOD, StatusGlyph.DOT)
         StatusHeadline.STALE -> Triple("Status is out of date", StatusTone.UNKNOWN, StatusGlyph.CLOCK)
@@ -575,19 +575,21 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
     DeviceHeader(name, host.endpoint, headlineParts[0], tone, kicker = stringResource(R.string.ui_remote_device),
         glyph = glyph, detail = headlineParts.getOrNull(1))
     val recovery = persisted?.let {
-        DisplayRecoveryPresentation.project(host, it, status, runtime.clock.monotonicNanos())
+        DisplayRecoveryPresentation.project(host, it, status, nowMonotonicNanos)
     } ?: PreviewPresentation.None
+    val displayDenied = displayDeniedReason(host)
     when (recovery) {
         is PreviewPresentation.Active -> PreviewCard(
             mode = "${recovery.preview.targetMode.width} × ${recovery.preview.targetMode.height}",
             remainingSeconds = recovery.remainingSeconds,
             status = recovery.remainingSeconds?.let { "Reverts in $it seconds" } ?: "Checking restoration…",
-            canRevert = recovery.revertAvailable && !busy,
-            canKeep = recovery.keepAvailable && !busy,
+            canRevert = recovery.revertAvailable && !busy && displayDenied == null,
+            canKeep = recovery.keepAvailable && !busy && displayDenied == null,
             onRevert = onRevert,
             onKeep = { keepConfirmation = KeepPreviewConfirmation.forPreview(host, recovery.preview) },
             deviceName = name,
-            question = stringResource(R.string.ui_preview_question, name))
+            question = stringResource(R.string.ui_preview_question, name),
+            revertReason = displayDenied, keepReason = displayDenied)
         is PreviewPresentation.Pending -> {
             StatusLine(stringResource(R.string.ui_result_not_confirmed), StatusTone.WARNING,
                 glyph = StatusGlyph.QUESTION, detail = "Check the device")
@@ -602,9 +604,9 @@ private fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, status
     val profile = host.cachedRecoveryProfiles?.let(DisplayInventory::distinctProfiles)?.firstOrNull()
     ActionRow(stringResource(R.string.ui_restore_saved_display),
         secondary = profile?.mode?.let { "${it.width} × ${it.height} · ${it.refreshHz ?: "?"} Hz" },
-        enabled = profile != null && !busy && (recovery == PreviewPresentation.None ||
+        enabled = profile != null && !busy && displayDenied == null && (recovery == PreviewPresentation.None ||
             recovery is PreviewPresentation.Active && recovery.revertAvailable),
-        reason = if (profile == null) "No recovery mode saved" else "Resolve the preview or operation first",
+        reason = displayDenied ?: if (profile == null) "No recovery mode saved" else "Resolve the preview or operation first",
         icon = R.drawable.ic_replay, onClick = { profile?.id?.let(onRestore) })
     val recoveryBlockReason = when (recovery) {
         is PreviewPresentation.Active -> "Waiting for this preview to be kept or reverted"

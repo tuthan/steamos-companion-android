@@ -27,10 +27,12 @@ import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.ControlObservation
 import io.github.tuthan.steamoscompanion.core.client.ControlOperationKind
 import io.github.tuthan.steamoscompanion.core.client.ControlOperationPresentation
+import io.github.tuthan.steamoscompanion.core.client.HostAccessPresentation
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
 import io.github.tuthan.steamoscompanion.core.client.PowerConfirmation
 import io.github.tuthan.steamoscompanion.core.client.PowerVerb
 import io.github.tuthan.steamoscompanion.core.client.StatusPollState
+import io.github.tuthan.steamoscompanion.core.protocol.HostScopes
 import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.wake.WakeAttemptState
@@ -234,7 +236,8 @@ private fun blockReason(block: ActionBlock): String = when (block) {
     ActionBlock.PREVIEW_ACTIVE, ActionBlock.PREVIEW_OWNED_ELSEWHERE, ActionBlock.PREVIEW_STATE_UNKNOWN ->
         "Check the display preview first"
     ActionBlock.OPERATION_IN_PROGRESS, ActionBlock.OPERATION_HISTORY_FULL -> "Review the current operation first"
-    ActionBlock.MISSING_POWER_PERMISSION -> "Power control permission is missing"
+    ActionBlock.MISSING_POWER_PERMISSION -> HostAccessPresentation.denied(HostScopes.POWER_CONTROL)
+    ActionBlock.MISSING_DISPLAY_PERMISSION -> HostAccessPresentation.denied(HostScopes.DISPLAY_CONTROL)
     ActionBlock.SUNSHINE_NOT_FRESHLY_STOPPED -> "Sunshine is not confirmed stopped"
     ActionBlock.CAPABILITY_UNAVAILABLE, ActionBlock.CAPABILITY_UNVERIFIED -> "Host capability unavailable"
     ActionBlock.DEVICE_IDENTITY_CHANGED, ActionBlock.DEVICE_CREDENTIAL_REJECTED -> "Check device identity"

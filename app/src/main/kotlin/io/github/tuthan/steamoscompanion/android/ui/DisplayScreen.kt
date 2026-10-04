@@ -28,6 +28,7 @@ import io.github.tuthan.steamoscompanion.core.client.DisplayOperationPresentatio
 import io.github.tuthan.steamoscompanion.core.client.DisplayOrderPresentation
 import io.github.tuthan.steamoscompanion.core.client.DisplaySelection
 import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
+import io.github.tuthan.steamoscompanion.core.client.HostAccessPresentation
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
 import io.github.tuthan.steamoscompanion.core.client.LinkAdvisory
@@ -41,6 +42,7 @@ import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.client.StatusObservationSource
 import io.github.tuthan.steamoscompanion.core.client.StatusPollState
 import io.github.tuthan.steamoscompanion.core.protocol.DisplayModeSummary
+import io.github.tuthan.steamoscompanion.core.protocol.HostScopes
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 
@@ -109,6 +111,8 @@ fun DisplayScreen(
     var keepConfirmation by remember(pairingKey) { mutableStateOf<KeepPreviewConfirmation?>(null) }
     val preview = state?.let { DisplayRecoveryPresentation.project(host, it, status, nowMonotonicNanos) }
         ?: PreviewPresentation.None
+    // The owner of the host can withdraw this scope at any time; every display request needs it, the screen stays.
+    val displayDenied = displayDeniedReason(host)
 
     val operationCard = state?.let { DisplayOperationPresentation.latest(host, it, status, nowMonotonicNanos) }
     val orderDraft = rememberOrderDraft(host, order, operationCard)
@@ -121,11 +125,13 @@ fun DisplayScreen(
             mode = modeLabel(preview.preview.targetMode),
             remainingSeconds = preview.remainingSeconds,
             status = preview.remainingSeconds?.let { "Reverts in $it seconds" } ?: "Checking restoration…",
-            canRevert = preview.revertAvailable && !busy,
-            canKeep = preview.keepAvailable && !busy,
+            canRevert = preview.revertAvailable && !busy && displayDenied == null,
+            canKeep = preview.keepAvailable && !busy && displayDenied == null,
             onRevert = onRevert,
             onKeep = { keepConfirmation = KeepPreviewConfirmation.forPreview(host, preview.preview) },
             question = stringResource(R.string.ui_preview_question, host.endpoint),
+            revertReason = displayDenied,
+            keepReason = displayDenied,
         )
         is PreviewPresentation.Pending -> StatusLine(stringResource(R.string.ui_result_not_confirmed),
             StatusTone.WARNING, glyph = StatusGlyph.QUESTION, detail = "Check the original operation")
@@ -142,7 +148,7 @@ fun DisplayScreen(
         StatusTone.WARNING, detail = "This host does not currently report a Gaming Mode display order")
     if (currentTab == TAB_ORDER && order != null) {
         val orderBlock = when {
-            "display.control" !in host.grantedScopes -> "Changing the display order needs display control permission"
+            displayDenied != null -> displayDenied
             preview != PreviewPresentation.None -> "Waiting for this preview to be kept or reverted"
             state != null && OperationLanePresentation.hasUnresolved(host, state) ->
                 "An earlier request has no confirmed result. Check it or mark it reviewed above."
@@ -170,9 +176,9 @@ fun DisplayScreen(
                 selected = chosen, onClick = { selectedProfileId = profile.id })
             // Next to the row it acts on, so a long list never separates the choice from its button.
             if (chosen) ActionRow(stringResource(R.string.ui_restore_saved_display),
-                enabled = !busy && (preview == PreviewPresentation.None ||
+                enabled = !busy && displayDenied == null && (preview == PreviewPresentation.None ||
                     preview is PreviewPresentation.Active && preview.revertAvailable),
-                reason = "Resolve the preview or operation first",
+                reason = displayDenied ?: "Resolve the preview or operation first",
                 icon = R.drawable.ic_replay,
                 onClick = { onRestore(profile.id) })
         }
@@ -184,9 +190,10 @@ fun DisplayScreen(
                 val current = output.modes.firstOrNull { it.id == output.currentModeId }
                 listOfNotNull(output.name ?: output.id, current?.let(::modeLabel)).joinToString(" · ")
             },
-            enabled = !legacyInventory && !busy && !status.unreachable && !status.stale &&
+            enabled = !legacyInventory && !busy && !status.unreachable && !status.stale && displayDenied == null &&
                 currentConfirmation != null && preview == PreviewPresentation.None,
             reason = when {
+                displayDenied != null -> displayDenied
                 legacyInventory -> "This host cannot save a recovery mode"
                 currentOutput == null -> "Display outputs are unavailable"
                 currentConfirmation == null -> "Current mode is unavailable"
@@ -223,7 +230,7 @@ fun DisplayScreen(
                 LinkAdvisory.connectorFor(linkFactsNow, selectedOutput.id)?.let { LinkFactsLine(LinkAdvisory.line(it)) }
                 Kicker("Modes")
                 val previewBlock = when {
-                    "display.control" !in host.grantedScopes -> "This pairing doesn't have display control permission"
+                    displayDenied != null -> displayDenied
                     status.unreachable || status.stale -> "Waiting for a fresh reading from the device"
                     else -> null
                 }
@@ -337,6 +344,11 @@ internal fun PictureConfirmationDialog(title: String, body: String, confirmLabel
         } },
         confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } })
 }
+
+/** Why every display control is disabled for this pairing, or null while the host allows Display. */
+internal fun displayDeniedReason(host: ActiveHost): String? =
+    if (HostAccessPresentation.allows(host.grantedScopes, HostScopes.DISPLAY_CONTROL)) null
+    else HostAccessPresentation.denied(HostScopes.DISPLAY_CONTROL)
 
 private const val TAB_RESOLUTION = "resolution"
 private const val TAB_SAVED = "saved"
