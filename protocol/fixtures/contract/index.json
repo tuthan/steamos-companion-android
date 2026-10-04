@@ -418,6 +418,30 @@
       "error": null
     },
     {
+      "case": "status/self-check-certificate-unusable",
+      "file": "status/self-check-certificate-unusable.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/self-check-plugin-version-unknown",
+      "file": "status/self-check-plugin-version-unknown.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/self-check-steam-temperature",
+      "file": "status/self-check-steam-temperature.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
       "case": "status/unauthorized-missing",
       "file": "status/unauthorized-missing.json",
       "method": "GET",

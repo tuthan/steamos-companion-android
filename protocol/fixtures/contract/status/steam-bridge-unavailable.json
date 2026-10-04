@@ -46,6 +46,36 @@
         "stale": false,
         "reason": null,
         "operation_id": null
+      },
+      "self_check": {
+        "certificate": {
+          "ready": true,
+          "fingerprint_short": "aaaaaaaa",
+          "not_before": "2026-09-13T11:59:00Z",
+          "not_after": "2036-09-10T11:59:00Z"
+        },
+        "listener": {
+          "bound": true,
+          "address": "0.0.0.0",
+          "port": 18443
+        },
+        "bridge": {
+          "ready": false,
+          "methods": []
+        },
+        "temperature": {
+          "source": "hwmon"
+        },
+        "provider": {
+          "monitor_enabled": false,
+          "state": "disabled",
+          "stale": false,
+          "contract_version": null
+        },
+        "versions": {
+          "protocol": 1,
+          "plugin": "0.0.0-fixture"
+        }
       }
     }
   }

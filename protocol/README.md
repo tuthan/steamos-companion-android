@@ -145,6 +145,7 @@ production. They keep the production shape, so they parse the same way:
 | `X-SteamOS-Companion-TLS-Binding` | base64url of the fixed 12-byte `tls-unique` value `fixture-tls1` |
 | legacy `pairing_code` | `4821-3579` |
 | `boot_id`, `uptime_seconds`, `cpu_temperature`, `wake_target` | fixed values |
+| `self_check.versions.plugin`, `self_check.certificate.not_before` / `not_after` | `0.0.0-fixture` (never the release number, so a version bump cannot drift the fixtures), `2026-09-13T11:59:00Z`, `2036-09-10T11:59:00Z` |
 | `steam_age_ms`, `sunshine.age_ms` | `0` (fixed monotonic clock) |
 | `gamescope_output_update_failed` / restart-failure message detail after `user systemd command failed:` | text from the fake `systemctl` runner |
 
@@ -158,3 +159,26 @@ python3 -m tests.contract_fixtures --check   # exit 1 on drift
 `tests/test_contract_fixtures.py` regenerates in memory and requires byte
 equality with the checked-in files, so these fixtures cannot drift from the
 host implementation.
+
+## Host self-check
+
+The authenticated `GET /v1/status` response carries an additive `self_check`
+object (`status.read`, no new route or scope). It is a read-only account of what
+the host already knows about itself, for a health card and a version nudge; it
+never carries credentials, MACs, pins, host or boot identifiers, or pairing
+material, and a contract test asserts that.
+
+| Key | Facts |
+| --- | --- |
+| `certificate` | `ready`; `fingerprint_short` (last 8 hex digits, the form pairing shows as "…xxxxxxxx"); `not_before` / `not_after` as UTC `YYYY-MM-DDTHH:MM:SSZ`, each `null` when unreadable |
+| `listener` | `bound`, `address`, `port` |
+| `bridge` | Steam frontend bridge `ready` and the fixed `methods` it currently offers |
+| `temperature` | `source`: `steam`, `hwmon`, or `unavailable` |
+| `provider` | Sunshine `monitor_enabled`, `state`, `stale`, and the owner's `contract_version` (`null` while monitoring is off) |
+| `versions` | `protocol` and the Decky `plugin` version; `plugin` is the literal `"unknown"` when the host cannot read it, never a guess |
+
+Clients must treat the object, and every field in it, as optional: a host that
+predates the block omits it. A client compares `versions.protocol` with the protocol it
+speaks and renders the mismatch itself; the host keeps no peer registry and
+probes nothing. The block is bounded by `schema.json` (`$defs/self_check`,
+`additionalProperties: false`), so an extension is a schema change.
