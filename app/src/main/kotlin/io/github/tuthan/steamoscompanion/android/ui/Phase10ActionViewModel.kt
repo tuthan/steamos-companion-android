@@ -11,7 +11,10 @@ import androidx.lifecycle.ViewModelProvider
 import io.github.tuthan.steamoscompanion.android.CompanionRuntime
 import io.github.tuthan.steamoscompanion.android.data.DiagnosticWriteResult
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
+import io.github.tuthan.steamoscompanion.core.client.ExportReadingsGate
+import io.github.tuthan.steamoscompanion.core.client.HostJournalState
 import io.github.tuthan.steamoscompanion.core.client.JournalDispatchResult
+import io.github.tuthan.steamoscompanion.core.client.LinkFactsReading
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.ReplacementDiscardResult
 import io.github.tuthan.steamoscompanion.core.client.StateCommitResult
@@ -67,8 +70,20 @@ class Phase10ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         }
     }
 
-    fun export(destination: Uri, observation: StatusPollState) = execute {
-        when (val result = runtime.diagnosticDocumentWriter.write(destination, observation)) {
+    /**
+     * Writes the owner's export. [gate] is the bounded wait for the readings the export asked for (null when none was asked
+     * for); once it is over, [readings] reads the link facts and the host journal that are in memory, and whatever is missing
+     * is null in the report.
+     */
+    fun export(
+        destination: Uri,
+        observation: StatusPollState,
+        gate: ExportReadingsGate?,
+        readings: () -> Pair<LinkFactsReading?, HostJournalState?>,
+    ) = execute {
+        gate?.await()
+        val (linkFacts, journal) = readings()
+        when (val result = runtime.diagnosticDocumentWriter.write(destination, observation, linkFacts, journal)) {
             is DiagnosticWriteResult.Saved -> "Sanitized diagnostics saved (${result.bytesWritten} bytes)" to StatusTone.GOOD
             DiagnosticWriteResult.PermissionDenied -> "Document permission denied" to StatusTone.WARNING
             DiagnosticWriteResult.DestinationUnavailable -> "Document location is unavailable" to StatusTone.WARNING

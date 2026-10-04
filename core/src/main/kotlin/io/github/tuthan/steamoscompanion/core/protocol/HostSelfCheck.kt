@@ -5,8 +5,9 @@ import java.time.format.DateTimeParseException
 
 /**
  * The host's own account of its health, from the optional `self_check` object of the authenticated
- * status response (Decky `protocol/schema.json` `$defs/self_check`). It is live status data only:
- * never persisted, journaled, or exported.
+ * status response (Decky `protocol/schema.json` `$defs/self_check`). It is live status data only: never
+ * persisted or journaled, and only the owner's explicit export names some of it, redacted (`DiagnosticReport`:
+ * never the listener address or the certificate's pin).
  *
  * Every section is nullable because a host may omit the block, a newer host may reshape a section,
  * and a malformed section must degrade to "not reported" instead of failing the status read.

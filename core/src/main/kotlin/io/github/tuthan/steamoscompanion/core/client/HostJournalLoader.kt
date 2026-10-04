@@ -13,8 +13,9 @@ fun interface HostJournalGateway {
 }
 
 /**
- * What the Host journal section shows for one pairing. It lives in memory only: it is never saved,
- * journaled, or exported, and it is dropped when the pairing changes.
+ * What the Host journal section shows for one pairing. It lives in memory only: it is never saved or
+ * journaled, only the owner's explicit export composes a redacted report from it, and it is dropped when
+ * the pairing changes.
  */
 sealed interface HostJournalState {
     val source: StatusObservationSource

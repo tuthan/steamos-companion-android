@@ -91,7 +91,7 @@ fun ConnectionDetailsScreen(
             navigates = true, onClick = onPairAnother)
     }
     ActionRow(stringResource(R.string.ui_export_sanitized_diagnostics), enabled = !busy, icon = R.drawable.ic_download,
-        secondary = "Exports bounded status and operation facts without stored secrets",
+        secondary = stringResource(R.string.ui_export_diagnostics_detail),
         onClick = onExport)
 
     Kicker("Operation journal", Modifier.padding(top = 8.dp))

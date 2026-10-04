@@ -2,7 +2,8 @@ package io.github.tuthan.steamoscompanion.core.protocol
 
 /**
  * The connector facts the host's kernel publishes, from `GET /v1/drm` (Decky `protocol/schema.json`
- * `$defs/drm`). They are advisory and live only: never persisted, journaled, or exported.
+ * `$defs/drm`). They are advisory and live only: never persisted or journaled, and only the owner's explicit
+ * export composes a redacted report from them (`DiagnosticReport`).
  *
  * The list is RESOLUTIONS ONLY: the kernel publishes no refresh rates, so nothing here supports a
  * conclusion about refresh rate. The HOST joins a connector to a display-bridge output

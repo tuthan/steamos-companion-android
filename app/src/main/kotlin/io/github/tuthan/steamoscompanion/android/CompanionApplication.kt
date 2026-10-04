@@ -2,6 +2,8 @@ package io.github.tuthan.steamoscompanion.android
 
 import android.app.Application
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import io.github.tuthan.steamoscompanion.android.data.AndroidAtomicStateStore
 import io.github.tuthan.steamoscompanion.android.data.AndroidClock
 import io.github.tuthan.steamoscompanion.android.data.AndroidNetworkAccess
@@ -41,6 +43,20 @@ import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
 import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 import io.github.tuthan.steamoscompanion.core.wake.WakeSender
+
+/** The installed `versionName`, for the diagnostics export; "unknown" when the package manager will not say. */
+private fun versionName(context: Context): String = try {
+    val packages = context.packageManager
+    val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        packages.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(0))
+    } else {
+        @Suppress("DEPRECATION")
+        packages.getPackageInfo(context.packageName, 0)
+    }
+    info.versionName ?: DiagnosticExporter.UNKNOWN_VERSION
+} catch (_: Exception) {
+    DiagnosticExporter.UNKNOWN_VERSION
+}
 
 /** Failures no other network can cure: bad input, a cancelled request, or a missing permission. */
 private val FINAL_NOT_SENT = setOf(TransportFailure.VALIDATION, TransportFailure.CANCELLED, TransportFailure.PERMISSION)
@@ -101,7 +117,7 @@ class CompanionRuntime private constructor(
             val operationReconciler = OperationReconciler(
                 stateRepository, operationJournal, PinnedOperationLookup(transport, networkAccess),
             )
-            val diagnosticExporter = DiagnosticExporter(stateRepository, clock)
+            val diagnosticExporter = DiagnosticExporter(stateRepository, clock, versionName(appContext))
             val diagnosticDocumentWriter = DiagnosticDocumentWriter(appContext.contentResolver, diagnosticExporter)
             val connectionRemoval = ConnectionRemoval(operationJournal, pairingTransactions)
             val connectionReplacement = ConnectionReplacement(pairingTransactions, operationJournal)

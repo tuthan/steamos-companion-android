@@ -139,6 +139,7 @@
     <string name="ui_pair_another_device">Pair with another device</string>
     <string name="ui_edit_address">Edit address</string>
     <string name="ui_export_sanitized_diagnostics">Export sanitized diagnostics</string>
+    <string name="ui_export_diagnostics_detail">Saves a redacted report of the host\'s health, displays, link modes and recent operations, with addresses, pins, identifiers and credentials removed. Read the file before you share it.</string>
     <string name="ui_wordmark_strong">SteamOS</string>
     <string name="ui_wordmark_light">Companion</string>
     <string name="ui_pill_lan_only">LAN only</string>

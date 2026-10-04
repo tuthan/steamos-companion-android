@@ -142,6 +142,86 @@ class HostJournalViewModelTest {
         assertEquals("and no timer asks again", 1, reads.get())
     }
 
+    // --- the owner's export asks once more, without taking away what is held --------------------------------------------
+
+    @Test fun anExportKeepsTheRecordsAlreadyHeldWhileItsOwnReadIsInFlightAndRunsItsHookAfterTheResult() {
+        val release = CountDownLatch(1)
+        val reads = AtomicInteger()
+        val model = model { _, _ ->
+            if (reads.incrementAndGet() == 1) journal("first") else { release.await(5, TimeUnit.SECONDS); journal("second") }
+        }
+        model.request(host())
+        awaitState(model) { it is HostJournalState.Ready }
+        val source = StatusObservationSource.from(host())
+
+        val seenByTheHook = mutableListOf<HostJournalState?>()
+        val hooks = AtomicInteger()
+        model.requestForExport(host()) { hooks.incrementAndGet(); seenByTheHook += model.state }
+        awaitState(model) { reads.get() == 2 }
+        assertEquals("the held records stay while the export's read runs", HostJournalState.Ready(source, journal("first")), model.state)
+        assertEquals(0, hooks.get())
+
+        release.countDown()
+        awaitState(model) { it == HostJournalState.Ready(source, journal("second")) }
+        assertEquals(1, hooks.get())
+        assertEquals("the hook sees the result already applied", listOf<HostJournalState?>(HostJournalState.Ready(source, journal("second"))), seenByTheHook)
+        assertEquals(2, reads.get())
+    }
+
+    @Test fun anExportOnAScreenThatNeverLoadedStillGetsItsHookAndNeverShowsLoading() {
+        val release = CountDownLatch(1)
+        val model = model { _, _ -> release.await(5, TimeUnit.SECONDS); journal("a") }
+        val hooks = AtomicInteger()
+        model.requestForExport(host()) { hooks.incrementAndGet() }
+        assertNull("nothing is shown as loading for an export", model.state)
+        release.countDown()
+        awaitState(model) { it is HostJournalState.Ready }
+        assertEquals(1, hooks.get())
+        // A later result does not run the hook again.
+        model.request(host())
+        awaitState(model) { it is HostJournalState.Ready }
+        Thread.sleep(200)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, hooks.get())
+    }
+
+    @Test fun anUnavailableAnswerStillReleasesTheExportsHook() {
+        val model = model { _, _ -> null }
+        val hooks = AtomicInteger()
+        model.requestForExport(host()) { hooks.incrementAndGet() }
+        awaitState(model) { it is HostJournalState.Unavailable }
+        assertEquals(1, hooks.get())
+    }
+
+    @Test fun clearingDropsAPendingExportHookAndAnExportAskedOnceReadsOnce() {
+        val release = CountDownLatch(1)
+        val reads = AtomicInteger()
+        val model = model { _, _ -> reads.incrementAndGet(); release.await(5, TimeUnit.SECONDS); journal("late") }
+        val hooks = AtomicInteger()
+        model.requestForExport(host()) { hooks.incrementAndGet() }
+        awaitState(model) { reads.get() == 1 }
+        model.clear()
+        release.countDown()
+        Thread.sleep(300)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, hooks.get())
+        assertNull(model.state)
+        assertEquals("no timer asks again", 1, reads.get())
+    }
+
+    @Test fun anExportHookLeftOverFromBeforeAClearNeverFiresForALaterRead() {
+        val model = model { _, _ -> journal("a") }
+        val stale = AtomicInteger()
+        model.requestForExport(host()) { stale.incrementAndGet() }
+        model.clear()
+        // The pairing comes back and the screen asks again: that result is not the old export's.
+        model.request(host())
+        awaitState(model) { it is HostJournalState.Ready }
+        Thread.sleep(200)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, stale.get())
+    }
+
     private fun host(token: String = "fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx") = ActiveHost(
         hostId = "host-fixture0001xxxxxxxxxxxxx", clientId = "client-android", endpoint = "deck.local:18443",
         certificatePin = "sha256:" + "ab".repeat(32), bearerToken = token,

@@ -23,7 +23,7 @@ STANDALONE_FIXTURES = {
     "fixtures/operations-list.json": ("ProtocolValidationTest", "hostOperationListFixtureEntriesParseWithTheOperationDecoder"),
     # The cross-client vector for the redacted diagnostic report: four response bodies per case and the exact report to rebuild.
     # It is not a response and adds no route.
-    "fixtures/diagnostic-report.json": ("DiagnosticReportVectorTest", "theVendoredVectorHasTheDocumentedFormatAndCases"),
+    "fixtures/diagnostic-report.json": ("DiagnosticReportVectorTest", "everyStrictCaseRebuildsTheReferenceReportByteForByte"),
 }
 
 # The closed route set dispatched by host/backend/service.py handle_http at the pinned commit.

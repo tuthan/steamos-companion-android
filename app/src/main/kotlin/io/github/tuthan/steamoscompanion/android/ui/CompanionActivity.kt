@@ -74,6 +74,8 @@ import io.github.tuthan.steamoscompanion.core.client.PowerConfirmation
 import io.github.tuthan.steamoscompanion.core.client.DisplaySelection
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
 import io.github.tuthan.steamoscompanion.core.client.HostJournalState
+import io.github.tuthan.steamoscompanion.core.client.ExportReadingsGate
+import io.github.tuthan.steamoscompanion.core.client.LinkFactsTopology
 import io.github.tuthan.steamoscompanion.core.client.LinkFactsReading
 import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
@@ -108,8 +110,30 @@ class CompanionActivity : ComponentActivity() {
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraGranted = granted
     }
+    /** What the export in progress waits for: its own once-each request for the host journal and the link facts. */
+    private var exportGate: ExportReadingsGate? = null
     private val diagnosticDocument = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) phase10.export(uri, status)
+        val gate = exportGate
+        exportGate = null
+        // The readings are taken from memory after the bounded wait, on the worker; whatever is missing is null in the report.
+        if (uri != null) phase10.export(uri, status, gate) { linkFacts.reading to hostJournal.state }
+    }
+
+    /**
+     * The owner asked for the diagnostics export. While the document picker is open, ask once each for the host journal and
+     * the link facts of this pairing (both loaders keep their 5 s spacing and latest-wins rules); never from the status poll,
+     * never on a timer. The export then waits for them, at most about four seconds in all, and uses what is in memory.
+     */
+    private fun startDiagnosticsExport() {
+        exportGate = host?.let { current ->
+            val gate = ExportReadingsGate(expected = 2, monotonicNanos = runtime.clock::monotonicNanos)
+            hostJournal.requestForExport(current) { gate.arrived() }
+            val observed = status.lastRead?.takeIf { status.source == StatusObservationSource.from(current) }
+            val topology = LinkFactsTopology.key(observed?.outputs)
+            if (topology != null) linkFacts.requestForExport(current, topology) { gate.arrived() } else gate.arrived()
+            gate
+        }
+        diagnosticDocument.launch("steamos-companion-diagnostics.json")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -247,7 +271,7 @@ class CompanionActivity : ComponentActivity() {
                     onDiscardReplacement = { generation -> phase10.discardReplacement(generation) },
                     onRevoke = { host?.let(phase10::revoke) },
                     onForget = { host?.let(phase10::forgetOnThisDevice) },
-                    onExport = { diagnosticDocument.launch("steamos-companion-diagnostics.json") },
+                    onExport = ::startDiagnosticsExport,
                     onDiscoveryRefresh = { withLocalNetworkAccess { pairingFlow.scan() } },
                     onDiscoverySelect = { candidate ->
                         pairingFlow.select(candidate)

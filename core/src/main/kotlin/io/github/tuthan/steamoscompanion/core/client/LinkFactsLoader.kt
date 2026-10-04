@@ -14,7 +14,8 @@ fun interface LinkFactsGateway {
 
 /**
  * One advisory reading, tied to the pairing and the output topology it was requested for. It lives in
- * memory only: it is never saved, journaled, or exported.
+ * memory only: it is never saved or journaled, and only the owner's explicit export composes a redacted
+ * report from it.
  */
 data class LinkFactsReading(val source: StatusObservationSource, val topology: String, val facts: LinkFacts?) {
     /** The facts, but only for this very pairing and topology; anything else is "no facts". */

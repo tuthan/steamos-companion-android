@@ -3,8 +3,9 @@ package io.github.tuthan.steamoscompanion.core.protocol
 /**
  * The host's operation journal as `GET /v1/operations` returns it (Decky `protocol/schema.json`
  * `$defs/operation`), rebuilt from an allowlist. It is diagnostic evidence of what the host recorded:
- * it lives in memory only and is never persisted, journaled, or exported, and nothing here decides
- * a mutation or proves a visible picture.
+ * it lives in memory only and is never persisted or journaled, only the owner's explicit export composes a
+ * redacted report from it (`DiagnosticReport`, which copies no record), and nothing here decides a mutation or
+ * proves a visible picture.
  *
  * [records] keep the host's order (newest first by the contract); they are not re-sorted here.
  */
@@ -52,7 +53,12 @@ sealed interface JournalValue {
 internal object HostJournalDecoder {
     /** The schema's `maxItems`; a longer list is not a conforming host, so it is not shown at all. */
     const val MAX_WIRE_RECORDS = 256
-    const val MAX_TARGET_KEYS = 8
+    /**
+     * The first keys of a record's `target` that are kept. The redacted diagnostic report names fourteen of them
+     * (eleven scalars, two string lists and `mode`), so a record that carries every one of them, whatever the
+     * host sent first, still reaches the report; the schema leaves `target` unbounded.
+     */
+    const val MAX_TARGET_KEYS = 16
     const val MAX_TARGET_LIST = 16
     const val MAX_TARGET_GROUP = 6
     const val MAX_TARGET_TEXT = 128

@@ -338,21 +338,23 @@ class HostJournalTest {
         )
     }
 
-    @Test fun targetIsBoundedToEightKeysAndDropsWhatDoesNotFit() {
-        val twelve = (1..12).joinToString(",") { "\"k$it\": $it" }
-        val kept = checkNotNull(decodeRecords(record { it["target"] = parse("{$twelve}") })).records.single()
-        assertEquals((1..8).map { "k$it" }, kept.target.keys.toList())
+    @Test fun targetIsBoundedToSixteenKeysAndDropsWhatDoesNotFit() {
+        assertEquals(16, HostJournalDecoder.MAX_TARGET_KEYS)
+        val twenty = (1..20).joinToString(",") { "\"k$it\": $it" }
+        val kept = checkNotNull(decodeRecords(record { it["target"] = parse("{$twenty}") })).records.single()
+        assertEquals((1..16).map { "k$it" }, kept.target.keys.toList())
         assertTrue(kept.target.size <= HostJournalDecoder.MAX_TARGET_KEYS)
 
-        // Eight entries are considered; invalid keys use up a slot, so a ninth valid entry never appears.
+        // Sixteen entries are considered; invalid keys use up a slot, so a later valid entry never appears.
+        val bad = (1..12).joinToString(",") { "\"bad key $it\": $it" }
         val withBadKeys = checkNotNull(decodeRecords(record {
-            it["target"] = parse("""{"bad key": 1, "": 2, "-x": 3, "ok1": 4, "ok2": 5, "ok3": 6, "ok4": 7, "ok5": 8, "ok6": 9, "ok7": 10}""")
+            it["target"] = parse("""{$bad, "ok1": 4, "ok2": 5, "ok3": 6, "ok4": 7, "ok5": 8, "ok6": 9, "ok7": 10}""")
         })).records.single()
-        assertEquals(listOf("ok1", "ok2", "ok3", "ok4", "ok5"), withBadKeys.target.keys.toList())
+        assertEquals(listOf("ok1", "ok2", "ok3", "ok4"), withBadKeys.target.keys.toList())
     }
 
     @Test fun targetEntriesWithOddValuesAreDroppedIndividually() {
-        // Eight entries are considered, so the odd shapes are split over two targets, each keeping only "fine".
+        // Few entries are used per target, so the odd shapes are split over two targets, each keeping only "fine".
         val seventeen = (1..17).joinToString(",") { "\"s$it\"" }
         val first = checkNotNull(decodeRecords(record {
             it["target"] = parse("""

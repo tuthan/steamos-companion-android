@@ -46,7 +46,9 @@ class DiagnosticDocumentWriterTest {
             assertEquals((result as DiagnosticWriteResult.Saved).bytesWritten, bytes.size)
             assertTrue(bytes.size <= DiagnosticExporter.MAX_EXPORT_BYTES)
             val text = bytes.toString(Charsets.UTF_8)
-            assertTrue(text.contains("\"format_version\":2"))
+            assertTrue(text.contains("\"format_version\":3"))
+            // Nothing was read from a host, so the report is present with every section null.
+            assertTrue(text.contains("\"report\":{\"format\":\"steamos-companion-report-v1\",\"host\":null,\"outputs\":null,\"link\":null,\"journal\":null}"))
             assertFalse(text.contains("TOKEN_SECRET_IN_RAW_ERROR"))
             assertEquals(DiagnosticWriteResult.InvalidDestination,
                 writer.write(Uri.fromFile(File(context.cacheDir, "invalid-export.json")), StatusPollState()))
