@@ -23,7 +23,9 @@ import io.github.tuthan.steamoscompanion.core.client.OperationJournal
 import io.github.tuthan.steamoscompanion.core.client.JournalUpdateResult
 import io.github.tuthan.steamoscompanion.core.client.OperationReconciler
 import io.github.tuthan.steamoscompanion.core.client.JournalMutationSender
+import io.github.tuthan.steamoscompanion.core.client.HostJournalGateway
 import io.github.tuthan.steamoscompanion.core.client.LinkFactsGateway
+import io.github.tuthan.steamoscompanion.core.client.PinnedHostJournalGateway
 import io.github.tuthan.steamoscompanion.core.client.PinnedLinkFactsGateway
 import io.github.tuthan.steamoscompanion.core.client.PairingStateTransactions
 import io.github.tuthan.steamoscompanion.core.client.PowerSettlement
@@ -66,6 +68,8 @@ class CompanionRuntime private constructor(
     val statusGateway: PinnedStatusGateway,
     /** Advisory DRM link facts; a separate read that shares nothing with the status poll. */
     val linkFactsGateway: LinkFactsGateway,
+    /** Diagnostic host journal; a separate read that shares nothing with the status poll. */
+    val hostJournalGateway: HostJournalGateway,
     val mutationSender: JournalMutationSender,
     val wakeSender: WakeSender,
     val transport: PinnedHttpTransport,
@@ -107,6 +111,7 @@ class CompanionRuntime private constructor(
             val connectionRepair = ConnectionRepair(stateRepository, discoveryScanner)
             val statusGateway = PinnedStatusGateway(transport, networkAccess, stateRepository)
             val linkFactsGateway = PinnedLinkFactsGateway(transport, networkAccess)
+            val hostJournalGateway = PinnedHostJournalGateway(transport, networkAccess)
             val mutationSender = JournalMutationSender { host, request, exactBody ->
                 val paths = try { networkAccess.activeLanPaths() }
                 catch (_: SecurityException) { return@JournalMutationSender RequestOutcome.NotSent(TransportFailure.PERMISSION) }
@@ -147,6 +152,7 @@ class CompanionRuntime private constructor(
                 connectionRepair = connectionRepair,
                 statusGateway = statusGateway,
                 linkFactsGateway = linkFactsGateway,
+                hostJournalGateway = hostJournalGateway,
                 mutationSender = mutationSender,
                 wakeSender = wakeSender,
                 transport = transport,

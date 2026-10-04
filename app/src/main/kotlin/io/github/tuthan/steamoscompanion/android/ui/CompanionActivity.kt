@@ -73,6 +73,7 @@ import io.github.tuthan.steamoscompanion.core.client.StatusPollState
 import io.github.tuthan.steamoscompanion.core.client.PowerConfirmation
 import io.github.tuthan.steamoscompanion.core.client.DisplaySelection
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
+import io.github.tuthan.steamoscompanion.core.client.HostJournalState
 import io.github.tuthan.steamoscompanion.core.client.LinkFactsReading
 import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
@@ -92,6 +93,7 @@ class CompanionActivity : ComponentActivity() {
     private lateinit var phase08: Phase08ActionViewModel
     private lateinit var displayActions: DisplayActionViewModel
     private lateinit var linkFacts: LinkFactsViewModel
+    private lateinit var hostJournal: HostJournalViewModel
     private lateinit var phase10: Phase10ActionViewModel
     private lateinit var pairingFlow: PairingFlowViewModel
     private var foreground = false
@@ -123,6 +125,8 @@ class CompanionActivity : ComponentActivity() {
             .get(DisplayActionViewModel::class.java)
         linkFacts = ViewModelProvider(this, LinkFactsViewModel.Factory(runtime))
             .get(LinkFactsViewModel::class.java)
+        hostJournal = ViewModelProvider(this, HostJournalViewModel.Factory(runtime))
+            .get(HostJournalViewModel::class.java)
         phase10 = ViewModelProvider(this, Phase10ActionViewModel.Factory(runtime))
             .get(Phase10ActionViewModel::class.java)
         pairingFlow = ViewModelProvider(this, PairingFlowViewModel.Factory(runtime))
@@ -203,6 +207,8 @@ class CompanionActivity : ComponentActivity() {
                     displayBusy = displayActions.busy, displayFeedback = displayActions.feedback,
                     linkFacts = linkFacts.reading,
                     onLinkFactsWanted = linkFacts::request,
+                    hostJournal = hostJournal.state,
+                    onHostJournalWanted = hostJournal::request,
                     phase10Busy = phase10.busy, phase10Feedback = phase10.feedback,
                     pairingFlow = pairingFlow, cameraGranted = cameraGranted,
                     permissionMessage = permissionMessage,
@@ -292,6 +298,7 @@ class CompanionActivity : ComponentActivity() {
             pairedSession = next?.let(::createPairedSession)
             status = StatusPollState()
             linkFacts.clear()
+            hostJournal.clear()
             wake = null
             if (foreground) pairedSession?.onStart()
             if (next == null) navigation.unpaired() else navigation.paired()
@@ -337,6 +344,8 @@ private fun CompanionRoot(
     displayFeedback: ActionFeedback?,
     linkFacts: LinkFactsReading?,
     onLinkFactsWanted: (ActiveHost, String) -> Unit,
+    hostJournal: HostJournalState?,
+    onHostJournalWanted: (ActiveHost) -> Unit,
     phase10Busy: Boolean,
     phase10Feedback: ActionFeedback?,
     pairingFlow: PairingFlowViewModel,
@@ -437,7 +446,8 @@ private fun CompanionRoot(
                         runCatching { WakeRelay.suggestionFrom(runtime.networkAccess.activeLanPaths()) }
                             .getOrNull()?.format().orEmpty()
                     },
-                    onSaveWakeRelay = { runtime.wakeRelayStore.set(host, it) })
+                    onSaveWakeRelay = { runtime.wakeRelayStore.set(host, it) },
+                    hostJournal = hostJournal, onHostJournalWanted = onHostJournalWanted)
                 else -> {
                     Text(destination.wireName.replace('_', ' '), style = MaterialTheme.typography.headlineSmall,
                         color = Color(palette.text.toInt()))

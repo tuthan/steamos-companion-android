@@ -205,4 +205,10 @@
     <string name="ui_link_advisory_title">Heads up</string>
     <string name="ui_link_advisory_body">%1$s isn\'t in the display link\'s mode list. It may still work, or the display may show no signal. The preview reverts on its own unless you keep it.</string>
     <string name="ui_link_advisory_state">Advisory</string>
+    <string name="ui_host_journal">Host journal</string>
+    <string name="ui_host_journal_refresh">Refresh journal</string>
+    <string name="ui_host_journal_loading">Loading the host journal…</string>
+    <string name="ui_host_journal_unavailable">The host journal is not available from this device.</string>
+    <string name="ui_host_journal_empty">The host has recorded no operations for this device yet.</string>
+    <string name="ui_host_journal_showing">Showing the newest %1$d of %2$d</string>
 </resources>

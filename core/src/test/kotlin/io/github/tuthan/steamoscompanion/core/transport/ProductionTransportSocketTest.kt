@@ -1,5 +1,6 @@
 package io.github.tuthan.steamoscompanion.core.transport
 
+import io.github.tuthan.steamoscompanion.core.client.PinnedHostJournalGateway
 import io.github.tuthan.steamoscompanion.core.client.PinnedLinkFactsGateway
 import io.github.tuthan.steamoscompanion.core.client.testActiveHost
 import io.github.tuthan.steamoscompanion.core.ports.Clock
@@ -424,6 +425,186 @@ class ProductionTransportSocketTest {
             try {
                 val cancellation = CancellationSignal()
                 val future = pool.submit<Any?> { linkGateway().read(linkHost(host), cancellation) }
+                val receivedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+                while (host.requests.isEmpty() && System.nanoTime() < receivedDeadline) Thread.sleep(5)
+                assertTrue("fake host did not receive the request", host.requests.isNotEmpty())
+                cancellation.cancel()
+                assertNull(future.get(2, TimeUnit.SECONDS))
+            } finally {
+                releaseHost.countDown()
+                pool.shutdownNow()
+            }
+        }
+    }
+
+    // --- diagnostic host journal: a separate, optional read that can never hurt the status read ---------------
+
+    private fun journalGateway(paths: () -> List<LanPath> = { listOf(loopbackPath()) }): PinnedHostJournalGateway {
+        val network = PathsNetworkAccess(paths)
+        return PinnedHostJournalGateway(transport(network), network)
+    }
+
+    @Test
+    fun hostJournalGatewayReadsTheHostFixtureWithTheBearerAndSendsOneBodylessGet() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Fixture("fixtures/contract/operations/list-mixed.json"))
+            val journal = journalGateway().read(linkHost(host), CancellationSignal())
+            assertNotNull(journal)
+            assertEquals(
+                listOf("op-fixture0007xxxxxxxxxxxxx", "op-fixture0005xxxxxxxxxxxxx", "op-fixture0004xxxxxxxxxxxxx",
+                    "op-fixture0002xxxxxxxxxxxxx", "op-fixture0001xxxxxxxxxxxxx"),
+                journal!!.records.map { it.id },
+            )
+            val request = host.requests.single()
+            assertEquals("GET", request.method)
+            assertEquals("/v1/operations", request.path)
+            assertEquals("Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx", request.headers["authorization"])
+            assertTrue(request.body.isEmpty())
+            host.assertHealthy()
+        }
+    }
+
+    @Test
+    fun anEmptyJournalIsAJournalNotAFailure() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Fixture("fixtures/contract/operations/list-empty.json"))
+            val journal = journalGateway().read(linkHost(host), CancellationSignal())
+            assertNotNull(journal)
+            assertTrue(journal!!.records.isEmpty())
+        }
+    }
+
+    @Test
+    fun theJournalNeedsOnlyAValidCredentialNotAScope() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Fixture("fixtures/contract/operations/list-empty.json"))
+            assertNotNull(journalGateway().read(linkHost(host, listOf("display.control")), CancellationSignal()))
+            assertEquals(1, host.requests.size)
+        }
+    }
+
+    @Test
+    fun anOlderHostsNotFoundIsNotAvailableAndTheStatusReadOnTheSameHostIsUnaffected() {
+        FakeTlsHost().use { host ->
+            // No script for GET /v1/operations: the fake answers 404 not_found, exactly as a host without the route does.
+            host.script("GET /v1/status", Reply.Body("fixtures/status-sunshine-running.json"))
+            val link = linkHost(host)
+            assertNull(journalGateway().read(link, CancellationSignal()))
+
+            val status = transport().execute(target(host), host.pin,
+                ApiRequest(HttpMethod.GET, "/v1/status", bearerToken = link.bearerToken))
+            assertTrue(status is RequestOutcome.Reply)
+            assertTrue(((status as RequestOutcome.Reply).response as ApiReply.Versioned).payload is VersionedPayload.Status)
+            assertEquals(listOf("/v1/operations", "/v1/status"), host.requests.map { it.path })
+            host.assertHealthy()
+        }
+    }
+
+    @Test
+    fun everyKindOfJournalReadFailureIsNotAvailableWithoutAThrowOrAReplay() {
+        val tooMany = (1..257).joinToString(",") { """{"id":"op-$it","kind":"power.suspend","state":"succeeded"}""" }
+        // Over the route's 256 KiB response limit, in many short strings so only the size is at fault.
+        val padding = (1..90).joinToString(",") { "\"${"y".repeat(3_000)}\"" }
+        val oversize = """{"protocol_version":1,"operations":[],"padding":[$padding]}"""
+        check(oversize.length > 256 * 1024)
+        val failures = mapOf(
+            "lost connection" to Reply.Lost,
+            "not json" to Reply.Json("not json at all"),
+            "wrong version" to Reply.Json("""{"protocol_version":2,"operations":[]}"""),
+            "list is a string" to Reply.Json("""{"protocol_version":1,"operations":"nope"}"""),
+            "list is missing" to Reply.Json("""{"protocol_version":1}"""),
+            "error envelope" to Reply.Fixture("fixtures/contract/operations/list-unauthorized.json"),
+            "server error" to Reply.Json("""{"error":"internal_error","message":"boom"}"""),
+            "more than 256 records" to Reply.Json("""{"protocol_version":1,"operations":[$tooMany]}"""),
+            "oversize response" to Reply.Json(oversize),
+        )
+        failures.forEach { (name, reply) ->
+            FakeTlsHost().use { host ->
+                host.script("GET /v1/operations", reply)
+                assertNull(name, journalGateway().read(linkHost(host), CancellationSignal()))
+                assertEquals("$name: one request, never replayed", 1, host.requests.size)
+                host.assertHealthy()
+            }
+        }
+    }
+
+    @Test
+    fun hostileRecordsInAnAcceptedListAreRebuiltNotPassedThrough() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Json("""
+                {"protocol_version":1,"operations":[
+                  {"id":"bad id","kind":"power.suspend","state":"succeeded"},
+                  {"id":"op-1","kind":"power.suspend","state":"succeeded","reason":"a\u0000b\u202Ec","token":"SECRET_MARKER",
+                   "target":{"action":"suspend","deep":{"a":{"b":1}}}}]}
+            """.trimIndent()))
+            val journal = journalGateway().read(linkHost(host), CancellationSignal())!!
+            assertEquals(listOf("op-1"), journal.records.map { it.id })
+            assertEquals("abc", journal.records.single().reason)
+            assertFalse(journal.toString().contains("SECRET_MARKER"))
+            assertEquals(setOf("action"), journal.records.single().target.keys)
+        }
+    }
+
+    @Test
+    fun eachNetworkIsTriedAtMostOnceForTheJournalAndAnAnswerFromTheHostEndsTheSearch() {
+        val two = { listOf(loopbackPath(), LanPath("loopback-test-2", null, listOf(InetAddress.getByName("127.0.0.1")), emptyList())) }
+        // The host answered (404 from an older host): the second network is never asked.
+        FakeTlsHost().use { host ->
+            assertNull(journalGateway(two).read(linkHost(host), CancellationSignal()))
+            assertEquals(1, host.requests.size)
+        }
+        // A lost connection on the first network moves on to the second, once; both lost means not available.
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Lost, Reply.Lost)
+            assertNull(journalGateway(two).read(linkHost(host), CancellationSignal()))
+            assertEquals(2, host.requests.size)
+        }
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Lost, Reply.Fixture("fixtures/contract/operations/list-mixed.json"))
+            assertNotNull(journalGateway(two).read(linkHost(host), CancellationSignal()))
+            assertEquals(2, host.requests.size)
+        }
+    }
+
+    @Test
+    fun hostJournalGatewayNeverOpensASocketWithoutPinNetworkOrCredential() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.Fixture("fixtures/contract/operations/list-mixed.json"))
+            val link = linkHost(host)
+            assertNull("wrong pin", journalGateway().read(link.copy(certificatePin = "sha256:${"00".repeat(32)}"), CancellationSignal()))
+            assertNull("no network", journalGateway { emptyList() }.read(link, CancellationSignal()))
+            assertNull("platform refuses the network list", journalGateway { throw SecurityException("no local network") }.read(link, CancellationSignal()))
+            assertNull("bad endpoint", journalGateway().read(link.copy(endpoint = "not a host"), CancellationSignal()))
+            assertNull("blank bearer", journalGateway().read(link.copy(bearerToken = " "), CancellationSignal()))
+            assertNull("already cancelled", journalGateway().read(link, CancellationSignal().also { it.cancel() }))
+            assertTrue("none of those reached the host", host.requests.isEmpty())
+            // And the same host still answers when nothing is wrong.
+            assertNotNull(journalGateway().read(link, CancellationSignal()))
+            assertEquals(1, host.requests.size)
+        }
+    }
+
+    @Test
+    fun eachJournalReadIsANewRequestNothingIsCached() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations",
+                Reply.Fixture("fixtures/contract/operations/list-mixed.json"), Reply.Fixture("fixtures/contract/operations/list-empty.json"))
+            val gateway = journalGateway()
+            assertEquals(5, gateway.read(linkHost(host), CancellationSignal())!!.records.size)
+            assertEquals(0, gateway.read(linkHost(host), CancellationSignal())!!.records.size)
+            assertEquals(2, host.requests.size)
+        }
+    }
+
+    @Test
+    fun cancellingAnInFlightJournalReadReturnsNotAvailablePromptly() {
+        val releaseHost = CountDownLatch(1)
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/operations", Reply.HoldConnection(releaseHost))
+            val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+            try {
+                val cancellation = CancellationSignal()
+                val future = pool.submit<Any?> { journalGateway().read(linkHost(host), cancellation) }
                 val receivedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
                 while (host.requests.isEmpty() && System.nanoTime() < receivedDeadline) Thread.sleep(5)
                 assertTrue("fake host did not receive the request", host.requests.isNotEmpty())

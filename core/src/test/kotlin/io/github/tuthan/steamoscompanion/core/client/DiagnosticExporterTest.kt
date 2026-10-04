@@ -10,6 +10,9 @@ import io.github.tuthan.steamoscompanion.core.protocol.HostCertificateCheck
 import io.github.tuthan.steamoscompanion.core.protocol.HostListenerCheck
 import io.github.tuthan.steamoscompanion.core.protocol.HostSelfCheck
 import io.github.tuthan.steamoscompanion.core.protocol.HostVersionsCheck
+import io.github.tuthan.steamoscompanion.core.protocol.HostJournal
+import io.github.tuthan.steamoscompanion.core.protocol.HostJournalRecord
+import io.github.tuthan.steamoscompanion.core.protocol.JournalValue
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.protocol.LinkConnector
 import io.github.tuthan.steamoscompanion.core.protocol.LinkFacts
@@ -147,6 +150,44 @@ class DiagnosticExporterTest {
         ).forEach { type ->
             val offending = type.declaredFields.filter { "Link" in it.genericType.typeName }
             assertTrue("${type.simpleName} has a link-facts field: $offending", offending.isEmpty())
+        }
+    }
+
+    /**
+     * The host operation journal is diagnostic, in-memory data held beside the status observation, not in it.
+     * Nothing the exporter reads can carry it, and the export must not gain any of its records.
+     */
+    @Test fun hostJournalRecordsAreNeverExported() {
+        val host = testActiveHost()
+        val state = HostJournalState.Ready(StatusObservationSource.from(host), HostJournal(listOf(HostJournalRecord(
+            id = "op-ID_MARKER", kind = "kind.KIND_MARKER", state = "STATE_MARKER", createdAt = "CREATED_MARKER", updatedAt = "UPDATED_MARKER",
+            outcome = "OUTCOME_MARKER", reason = "REASON_MARKER", restoreState = "RESTORE_MARKER", restored = true, resolvedBy = "RESOLVED_MARKER",
+            target = mapOf("target_key" to JournalValue.Text("TARGET_MARKER"), "list" to JournalValue.TextList(listOf("LIST_MARKER")))))))
+        val status = VersionedPayload.Status(host.hostId, "boot-1", WireValue.Known(SteamBridgeState.READY),
+            mapOf("suspend" to WireValue.Known(CapabilityState.AVAILABLE)), WireValue.Known(SunshineState.RUNNING), jsonObject())
+        val text = DiagnosticExporter.encode(
+            StateLoadResult.Ready(PersistentState(activeHost = host)),
+            StatusPollState(lastRead = PairedStatusRead(status, null, null), lastSuccessMonotonicNanos = 1,
+                source = StatusObservationSource.from(host)), 10,
+        ).toString(Charsets.UTF_8)
+
+        assertNotNull(state.forHost(host))
+        assertTrue(text.contains("\"authenticated_read_present\":true"))
+        listOf(
+            "hostJournal", "HostJournal", "host_journal", "restore_state", "resolved_by", "target_key",
+            "ID_MARKER", "KIND_MARKER", "STATE_MARKER", "CREATED_MARKER", "UPDATED_MARKER", "OUTCOME_MARKER", "REASON_MARKER",
+            "RESTORE_MARKER", "RESOLVED_MARKER", "TARGET_MARKER", "LIST_MARKER",
+        ).forEach { assertFalse("Exported $it", text.contains(it)) }
+    }
+
+    /** No type that is saved to encrypted state, journaled, or exported has a place to put the host's journal. */
+    @Test fun persistedAndExportedModelsHaveNoHostJournalField() {
+        listOf(
+            PersistentState::class.java, ActiveHost::class.java, JournalEntry::class.java, PairingCandidate::class.java,
+            StatusPollState::class.java, PairedStatusRead::class.java,
+        ).forEach { type ->
+            val offending = type.declaredFields.filter { "HostJournal" in it.genericType.typeName || "JournalRecord" in it.genericType.typeName }
+            assertTrue("${type.simpleName} has a host-journal field: $offending", offending.isEmpty())
         }
     }
 }

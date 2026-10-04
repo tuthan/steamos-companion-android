@@ -7,6 +7,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +22,7 @@ import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.CandidatePhase
 import io.github.tuthan.steamoscompanion.core.client.HostHealthUnavailableReason
 import io.github.tuthan.steamoscompanion.core.client.HostHealthView
+import io.github.tuthan.steamoscompanion.core.client.HostJournalState
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.PairingCandidate
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
@@ -49,11 +51,17 @@ fun ConnectionDetailsScreen(
     onSaveWakeRelay: (String) -> Boolean = { false },
     /** Projected from the paired session's latest status observation by `HostHealthPresentation`. */
     hostHealth: HostHealthView = HostHealthView.Unavailable(HostHealthUnavailableReason.CHECKING),
+    /** The host's operation journal; in memory only, and only ever shown for this pairing. */
+    hostJournal: HostJournalState? = null,
+    /** Asks for the host journal of this pairing: once when this screen opens, and again on Refresh. */
+    onHostJournalWanted: (ActiveHost) -> Unit = {},
 ) {
     val palette = LocalCompanionPalette.current
     var replacementIntent by remember(StatusObservationSource.from(host)) { mutableStateOf<ReplacementIntent?>(null) }
     var discardGeneration by remember(StatusObservationSource.from(host)) { mutableStateOf<Long?>(null) }
     var removalChoice by remember(StatusObservationSource.from(host)) { mutableStateOf<RemovalChoice?>(null) }
+    // Read when this screen opens for this pairing, never from the status poll and never on a timer.
+    LaunchedEffect(StatusObservationSource.from(host)) { onHostJournalWanted(host) }
     Kicker("Paired device")
     Text(name, style = MaterialTheme.typography.titleMedium, color = Color(palette.heading.toInt()))
     MonoValue(host.endpoint)
@@ -93,6 +101,7 @@ fun ConnectionDetailsScreen(
             "${entry.method} ${entry.path} · ${entry.phase.wireValue}${entry.rejectionCode?.let { " · ${it.wireValue}" } ?: ""}" +
                 (entry.resultSummary?.takeIf { entry.phase == JournalPhase.FAILED }?.let { " · ${it.take(120)}" } ?: ""))
     })
+    HostJournalSection(hostJournal?.forHost(host)) { onHostJournalWanted(host) }
     ActionRow(stringResource(R.string.ui_remove_pairing), enabled = !busy, icon = R.drawable.ic_key,
         secondary = "Revoke on the device or forget here", danger = true, navigates = true,
         onClick = { removalChoice = RemovalChoice.REVOKE })
