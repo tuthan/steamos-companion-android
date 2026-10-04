@@ -21,6 +21,9 @@ STANDALONE_FIXTURES = {
     # The legacy v0.5.18 body of GET /v1/operations (list), decoded by the per-operation decoder. The route itself
     # is covered by the generated operations/list-* contract cases.
     "fixtures/operations-list.json": ("ProtocolValidationTest", "hostOperationListFixtureEntriesParseWithTheOperationDecoder"),
+    # The cross-client vector for the redacted diagnostic report: four response bodies per case and the exact report to rebuild.
+    # It is not a response and adds no route.
+    "fixtures/diagnostic-report.json": ("DiagnosticReportVectorTest", "theVendoredVectorHasTheDocumentedFormatAndCases"),
 }
 
 # The closed route set dispatched by host/backend/service.py handle_http at the pinned commit.
