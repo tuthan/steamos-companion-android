@@ -231,8 +231,9 @@ class HostJournalSectionTest {
         compose.onNodeWithText("HOST JOURNAL").performScrollTo().assertExists()
         compose.onNodeWithText("Display mode preview · Returned, not confirmed").performScrollTo().assertExists()
         compose.onNodeWithText(note).performScrollTo().assertExists()
-        // The app's own request log and the removal action are still there.
-        compose.onNodeWithText("OPERATION JOURNAL").performScrollTo().assertExists()
+        // The app's own request log is named for what it is, so it cannot be mistaken for the host's journal.
+        compose.onNodeWithText("REQUESTS FROM THIS PHONE").performScrollTo().assertExists()
+        compose.onNodeWithText("OPERATION JOURNAL").assertDoesNotExist()
         compose.onNodeWithContentDescription("Remove this pairing").performScrollTo().assertExists()
     }
 

@@ -94,8 +94,8 @@ fun ConnectionDetailsScreen(
         secondary = stringResource(R.string.ui_export_diagnostics_detail),
         onClick = onExport)
 
-    Kicker("Operation journal", Modifier.padding(top = 8.dp))
-    if (state?.journal.isNullOrEmpty()) StatusLine("No operations recorded", StatusTone.UNKNOWN)
+    Kicker("Requests from this phone", Modifier.padding(top = 8.dp))
+    if (state?.journal.isNullOrEmpty()) StatusLine("No requests recorded", StatusTone.UNKNOWN)
     else WireLog(state.journal.takeLast(8).asReversed().map { entry ->
         WireLogEntry(if (entry.phase == JournalPhase.FAILED) WireDirection.BLOCKED else WireDirection.REQUEST,
             "${entry.method} ${entry.path} · ${entry.phase.wireValue}${entry.rejectionCode?.let { " · ${it.wireValue}" } ?: ""}" +
