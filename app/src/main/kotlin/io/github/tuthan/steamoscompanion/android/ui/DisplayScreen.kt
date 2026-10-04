@@ -30,6 +30,9 @@ import io.github.tuthan.steamoscompanion.core.client.DisplaySelection
 import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
+import io.github.tuthan.steamoscompanion.core.client.LinkAdvisory
+import io.github.tuthan.steamoscompanion.core.client.LinkFactsReading
+import io.github.tuthan.steamoscompanion.core.client.LinkFactsTopology
 import io.github.tuthan.steamoscompanion.core.client.OrderRestartConfirmation
 import io.github.tuthan.steamoscompanion.core.client.OperationLanePresentation
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
@@ -60,6 +63,10 @@ fun DisplayScreen(
     onCheckOperation: () -> Unit,
     /** Opens the Gaming Mode display order tab, as the overview row does. */
     startOnOrder: Boolean = false,
+    /** Advisory DRM link facts; only a reading for this pairing and output topology is ever used. */
+    linkFacts: LinkFactsReading? = null,
+    /** Asks for the link facts of this pairing and topology. Called once per display interaction. */
+    onLinkFactsWanted: (ActiveHost, String) -> Unit = { _, _ -> },
 ) {
     val palette = LocalCompanionPalette.current
     val pairingKey = StatusObservationSource.from(host)
@@ -79,6 +86,17 @@ fun DisplayScreen(
     val selectedOutput = inventory?.outputs?.firstOrNull {
         it.id == selection?.outputId && it.generation == selection?.outputGeneration
     }
+    // Advisory facts: asked for once when this screen opens and again when the output topology changes,
+    // never from the status poll. A reading for any other pairing or topology is treated as no facts.
+    val linkTopology = LinkFactsTopology.key(inventory)
+    var linkRequested by remember(pairingKey) { mutableStateOf<String?>(null) }
+    LaunchedEffect(pairingKey, linkTopology) {
+        if (linkTopology != null && linkTopology != linkRequested) {
+            linkRequested = linkTopology
+            onLinkFactsWanted(host, linkTopology)
+        }
+    }
+    val linkFactsNow = linkFacts?.factsFor(host, linkTopology)
     val profileInventory = DisplayInventory.distinctProfiles(
         if (inventory != null && !status.unreachable && !status.stale) inventory.profiles
         else host.cachedRecoveryProfiles.orEmpty(),
@@ -202,6 +220,7 @@ fun DisplayScreen(
                     onClick = { selection = DisplaySelection(output.id, output.generation, output.currentModeId) })
             }
             if (selectedOutput != null) {
+                LinkAdvisory.connectorFor(linkFactsNow, selectedOutput.id)?.let { LinkFactsLine(LinkAdvisory.line(it)) }
                 Kicker("Modes")
                 val previewBlock = when {
                     "display.control" !in host.grantedScopes -> "This pairing doesn't have display control permission"
@@ -218,6 +237,8 @@ fun DisplayScreen(
                     // Next to the chosen resolution, so a long list never separates the choice from its button.
                     if (chosen && mode.id != selectedOutput.currentModeId && !legacyInventory) {
                         if (preview == PreviewPresentation.None) {
+                            LinkAdvisory.evaluate(linkFactsNow, selectedOutput.id, mode, selectedOutput.currentModeId)
+                                ?.let { LinkAdvisoryRow(it) }
                             PrimaryAction("Preview ${modeLabel(mode)}", icon = R.drawable.ic_play,
                                 enabled = !busy && previewBlock == null, onClick = { selection?.let(onPreview) })
                             previewBlock?.let { StatusLine(it, StatusTone.WARNING) }

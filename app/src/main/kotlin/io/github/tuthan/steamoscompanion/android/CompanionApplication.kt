@@ -23,6 +23,8 @@ import io.github.tuthan.steamoscompanion.core.client.OperationJournal
 import io.github.tuthan.steamoscompanion.core.client.JournalUpdateResult
 import io.github.tuthan.steamoscompanion.core.client.OperationReconciler
 import io.github.tuthan.steamoscompanion.core.client.JournalMutationSender
+import io.github.tuthan.steamoscompanion.core.client.LinkFactsGateway
+import io.github.tuthan.steamoscompanion.core.client.PinnedLinkFactsGateway
 import io.github.tuthan.steamoscompanion.core.client.PairingStateTransactions
 import io.github.tuthan.steamoscompanion.core.client.PowerSettlement
 import io.github.tuthan.steamoscompanion.core.discovery.DiscoveryScanner
@@ -62,6 +64,8 @@ class CompanionRuntime private constructor(
     val displayDispatcher: DisplayDispatcher,
     val connectionRepair: ConnectionRepair,
     val statusGateway: PinnedStatusGateway,
+    /** Advisory DRM link facts; a separate read that shares nothing with the status poll. */
+    val linkFactsGateway: LinkFactsGateway,
     val mutationSender: JournalMutationSender,
     val wakeSender: WakeSender,
     val transport: PinnedHttpTransport,
@@ -102,6 +106,7 @@ class CompanionRuntime private constructor(
             val displayDispatcher = DisplayDispatcher(stateRepository, operationJournal, clock)
             val connectionRepair = ConnectionRepair(stateRepository, discoveryScanner)
             val statusGateway = PinnedStatusGateway(transport, networkAccess, stateRepository)
+            val linkFactsGateway = PinnedLinkFactsGateway(transport, networkAccess)
             val mutationSender = JournalMutationSender { host, request, exactBody ->
                 val paths = try { networkAccess.activeLanPaths() }
                 catch (_: SecurityException) { return@JournalMutationSender RequestOutcome.NotSent(TransportFailure.PERMISSION) }
@@ -141,6 +146,7 @@ class CompanionRuntime private constructor(
                 displayDispatcher = displayDispatcher,
                 connectionRepair = connectionRepair,
                 statusGateway = statusGateway,
+                linkFactsGateway = linkFactsGateway,
                 mutationSender = mutationSender,
                 wakeSender = wakeSender,
                 transport = transport,

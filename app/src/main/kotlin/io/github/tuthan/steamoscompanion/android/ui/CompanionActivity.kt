@@ -73,6 +73,7 @@ import io.github.tuthan.steamoscompanion.core.client.StatusPollState
 import io.github.tuthan.steamoscompanion.core.client.PowerConfirmation
 import io.github.tuthan.steamoscompanion.core.client.DisplaySelection
 import io.github.tuthan.steamoscompanion.core.client.KeepPreviewConfirmation
+import io.github.tuthan.steamoscompanion.core.client.LinkFactsReading
 import io.github.tuthan.steamoscompanion.core.client.SaveCurrentConfirmation
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
@@ -90,6 +91,7 @@ class CompanionActivity : ComponentActivity() {
     private var pairedSession: PairedGraphSession? = null
     private lateinit var phase08: Phase08ActionViewModel
     private lateinit var displayActions: DisplayActionViewModel
+    private lateinit var linkFacts: LinkFactsViewModel
     private lateinit var phase10: Phase10ActionViewModel
     private lateinit var pairingFlow: PairingFlowViewModel
     private var foreground = false
@@ -119,6 +121,8 @@ class CompanionActivity : ComponentActivity() {
             .get(Phase08ActionViewModel::class.java)
         displayActions = ViewModelProvider(this, DisplayActionViewModel.Factory(runtime))
             .get(DisplayActionViewModel::class.java)
+        linkFacts = ViewModelProvider(this, LinkFactsViewModel.Factory(runtime))
+            .get(LinkFactsViewModel::class.java)
         phase10 = ViewModelProvider(this, Phase10ActionViewModel.Factory(runtime))
             .get(Phase10ActionViewModel::class.java)
         pairingFlow = ViewModelProvider(this, PairingFlowViewModel.Factory(runtime))
@@ -197,6 +201,8 @@ class CompanionActivity : ComponentActivity() {
                 CompanionRoot(route.destination, host, persisted, status, wake, runtime,
                     busy = phase08.busy, feedback = phase08.feedback,
                     displayBusy = displayActions.busy, displayFeedback = displayActions.feedback,
+                    linkFacts = linkFacts.reading,
+                    onLinkFactsWanted = linkFacts::request,
                     phase10Busy = phase10.busy, phase10Feedback = phase10.feedback,
                     pairingFlow = pairingFlow, cameraGranted = cameraGranted,
                     permissionMessage = permissionMessage,
@@ -285,6 +291,7 @@ class CompanionActivity : ComponentActivity() {
             pairedSession?.close()
             pairedSession = next?.let(::createPairedSession)
             status = StatusPollState()
+            linkFacts.clear()
             wake = null
             if (foreground) pairedSession?.onStart()
             if (next == null) navigation.unpaired() else navigation.paired()
@@ -328,6 +335,8 @@ private fun CompanionRoot(
     feedback: ActionFeedback?,
     displayBusy: Boolean,
     displayFeedback: ActionFeedback?,
+    linkFacts: LinkFactsReading?,
+    onLinkFactsWanted: (ActiveHost, String) -> Unit,
     phase10Busy: Boolean,
     phase10Feedback: ActionFeedback?,
     pairingFlow: PairingFlowViewModel,
@@ -406,7 +415,8 @@ private fun CompanionRoot(
                     persisted?.activeHost ?: host, persisted, status, runtime.clock.monotonicNanos(),
                     displayBusy, displayFeedback, onPreview, onRestore, onRevert, onKeep, onSaveCurrent,
                     onSaveOrder, onSaveOrderAndRestart, onResetOrder, onCheckOperation,
-                    startOnOrder = destination == UiDestination.DISPLAY_ORDER)
+                    startOnOrder = destination == UiDestination.DISPLAY_ORDER,
+                    linkFacts = linkFacts, onLinkFactsWanted = onLinkFactsWanted)
                 UiDestination.POWER -> if (host != null) PowerScreen(host,
                     runtime.aliasStore.get(host) ?: host.endpoint, actionContext(host, persisted, status),
                     persisted, status, runtime.clock.monotonicNanos(), busy, feedback,

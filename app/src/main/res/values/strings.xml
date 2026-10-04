@@ -199,4 +199,10 @@
     <string name="ui_health_nudge_newer">Host protocol %1$s is newer than this app supports — some actions may be unavailable. Update this app.</string>
     <string name="ui_health_nudge_older">Host protocol %1$s is older than this app — update the plugin on the host.</string>
     <string name="ui_health_nudge_matches">Host protocol %1$s matches this app.</string>
+    <string name="ui_link_line">Link: %1$s</string>
+    <string name="ui_link_join">" · "</string>
+    <string name="ui_link_model">%1$s model %2$d</string>
+    <string name="ui_link_advisory_title">Heads up</string>
+    <string name="ui_link_advisory_body">%1$s isn\'t in the display link\'s mode list. It may still work, or the display may show no signal. The preview reverts on its own unless you keep it.</string>
+    <string name="ui_link_advisory_state">Advisory</string>
 </resources>

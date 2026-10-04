@@ -1,5 +1,7 @@
 package io.github.tuthan.steamoscompanion.core.transport
 
+import io.github.tuthan.steamoscompanion.core.client.PinnedLinkFactsGateway
+import io.github.tuthan.steamoscompanion.core.client.testActiveHost
 import io.github.tuthan.steamoscompanion.core.ports.Clock
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
 import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
@@ -53,6 +55,8 @@ import org.bouncycastle.tls.crypto.impl.bc.BcDefaultTlsCredentialedSigner
 import org.bouncycastle.tls.crypto.impl.bc.BcTlsCrypto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -282,6 +286,153 @@ class ProductionTransportSocketTest {
             assertTrue(request.body.isEmpty())
             assertTrue(request.headers.keys.none { it in setOf("authorization", "cookie", "x-steamos-companion-tls-binding") })
             host.assertHealthy()
+        }
+    }
+
+
+    // --- advisory DRM link facts: a separate, optional read that can never hurt the status read ---------------
+
+    private class PathsNetworkAccess(private val paths: () -> List<LanPath>) : NetworkAccess {
+        override fun activeLanPaths() = paths()
+        override fun resolve(host: String, path: LanPath) = listOf(InetAddress.getByName("127.0.0.1"))
+        override fun bind(socket: Socket, path: LanPath) = Unit
+        override fun bind(socket: DatagramSocket, path: LanPath) = Unit
+    }
+
+    private fun loopbackPath() = LanPath("loopback-test", null, listOf(InetAddress.getByName("127.0.0.1")), emptyList())
+
+    private fun linkHost(host: FakeTlsHost, scopes: List<String> = listOf("status.read")) =
+        testActiveHost(endpoint = "127.0.0.1:${host.port}").copy(certificatePin = host.pin, grantedScopes = scopes)
+
+    private fun linkGateway(paths: () -> List<LanPath> = { listOf(loopbackPath()) }): PinnedLinkFactsGateway {
+        val network = PathsNetworkAccess(paths)
+        return PinnedLinkFactsGateway(transport(network), network)
+    }
+
+    @Test
+    fun linkFactsGatewayReadsTheHostFixtureWithTheBearerAndSendsOneBodylessGet() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/drm", Reply.Fixture("fixtures/contract/drm/available.json"))
+            val facts = linkGateway().read(linkHost(host), CancellationSignal())
+            assertNotNull(facts)
+            assertEquals(listOf("DP-1", "HDMI-A-1", "HDMI-A-2", "eDP-1"), facts!!.connectors.map { it.connector })
+            assertEquals("1", facts.connectors.single { it.connector == "HDMI-A-1" }.steamOutputId)
+            val request = host.requests.single()
+            assertEquals("GET", request.method)
+            assertEquals("/v1/drm", request.path)
+            assertEquals("Bearer fixture-token-0002-xxxxxxxxxxxxxxxxxxxxxxxx", request.headers["authorization"])
+            assertTrue(request.body.isEmpty())
+            host.assertHealthy()
+        }
+    }
+
+    @Test
+    fun anOlderHostsNotFoundIsNoFactsAndTheStatusReadOnTheSameHostIsUnaffected() {
+        FakeTlsHost().use { host ->
+            // No script for GET /v1/drm: the fake answers 404 not_found, exactly as a host without the route does.
+            host.script("GET /v1/status", Reply.Body("fixtures/status-sunshine-running.json"))
+            val link = linkHost(host)
+            assertNull(linkGateway().read(link, CancellationSignal()))
+
+            val status = transport().execute(target(host), host.pin,
+                ApiRequest(HttpMethod.GET, "/v1/status", bearerToken = link.bearerToken))
+            assertTrue(status is RequestOutcome.Reply)
+            assertTrue(((status as RequestOutcome.Reply).response as ApiReply.Versioned).payload is VersionedPayload.Status)
+            assertEquals(listOf("/v1/drm", "/v1/status"), host.requests.map { it.path })
+            host.assertHealthy()
+        }
+    }
+
+    @Test
+    fun everyKindOfReadFailureIsNoFactsWithoutAThrowOrAReplay() {
+        val failures = mapOf(
+            "lost connection" to Reply.Lost,
+            "not json" to Reply.Json("not json at all"),
+            "wrong version" to Reply.Json("""{"protocol_version":2,"drm":{"available":true,"connectors":[]}}"""),
+            "block is a string" to Reply.Json("""{"protocol_version":1,"drm":"nope"}"""),
+            "block is missing" to Reply.Json("""{"protocol_version":1}"""),
+            "error envelope" to Reply.Fixture("fixtures/contract/drm/unauthorized.json"),
+            "malformed connector list" to Reply.Json("""{"protocol_version":1,"drm":{"available":true,"connectors":"x"}}"""),
+        )
+        failures.forEach { (name, reply) ->
+            FakeTlsHost().use { host ->
+                host.script("GET /v1/drm", reply)
+                assertNull(name, linkGateway().read(linkHost(host), CancellationSignal()))
+                assertEquals("$name: one request, never replayed", 1, host.requests.size)
+                host.assertHealthy()
+            }
+        }
+    }
+
+    @Test
+    fun eachNetworkIsTriedAtMostOnceAndAnAnswerFromTheHostEndsTheSearch() {
+        val two = { listOf(loopbackPath(), LanPath("loopback-test-2", null, listOf(InetAddress.getByName("127.0.0.1")), emptyList())) }
+        // The host answered (404 from an older host): the second network is never asked.
+        FakeTlsHost().use { host ->
+            assertNull(linkGateway(two).read(linkHost(host), CancellationSignal()))
+            assertEquals(1, host.requests.size)
+        }
+        // A lost connection on the first network moves on to the second, once; both lost means no facts.
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/drm", Reply.Lost, Reply.Lost)
+            assertNull(linkGateway(two).read(linkHost(host), CancellationSignal()))
+            assertEquals(2, host.requests.size)
+        }
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/drm", Reply.Lost, Reply.Fixture("fixtures/contract/drm/available.json"))
+            assertNotNull(linkGateway(two).read(linkHost(host), CancellationSignal()))
+            assertEquals(2, host.requests.size)
+        }
+    }
+
+    @Test
+    fun anUnavailableHostIsDecodedAsFactsThatSayNothingNotAsAFailure() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/drm", Reply.Fixture("fixtures/contract/drm/no-connectors.json"))
+            val facts = linkGateway().read(linkHost(host), CancellationSignal())
+            assertNotNull(facts)
+            assertFalse(facts!!.available)
+            assertTrue(facts.connectors.isEmpty())
+        }
+    }
+
+    @Test
+    fun linkFactsGatewayNeverOpensASocketWithoutPermissionPinOrNetwork() {
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/drm", Reply.Fixture("fixtures/contract/drm/available.json"))
+            val link = linkHost(host)
+            assertNull("no status.read", linkGateway().read(linkHost(host, listOf("display.control")), CancellationSignal()))
+            assertNull("wrong pin", linkGateway().read(link.copy(certificatePin = "sha256:${"00".repeat(32)}"), CancellationSignal()))
+            assertNull("no network", linkGateway { emptyList() }.read(link, CancellationSignal()))
+            assertNull("platform refuses the network list", linkGateway { throw SecurityException("no local network") }.read(link, CancellationSignal()))
+            assertNull("bad endpoint", linkGateway().read(link.copy(endpoint = "not a host"), CancellationSignal()))
+            assertNull("blank bearer", linkGateway().read(link.copy(bearerToken = " "), CancellationSignal()))
+            assertNull("already cancelled", linkGateway().read(link, CancellationSignal().also { it.cancel() }))
+            assertTrue("none of those reached the host", host.requests.isEmpty())
+            // And the same host still answers when nothing is wrong.
+            assertNotNull(linkGateway().read(link, CancellationSignal()))
+            assertEquals(1, host.requests.size)
+        }
+    }
+
+    @Test
+    fun cancellingAnInFlightLinkFactsReadReturnsNoFactsPromptly() {
+        val releaseHost = CountDownLatch(1)
+        FakeTlsHost().use { host ->
+            host.script("GET /v1/drm", Reply.HoldConnection(releaseHost))
+            val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+            try {
+                val cancellation = CancellationSignal()
+                val future = pool.submit<Any?> { linkGateway().read(linkHost(host), cancellation) }
+                val receivedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3)
+                while (host.requests.isEmpty() && System.nanoTime() < receivedDeadline) Thread.sleep(5)
+                assertTrue("fake host did not receive the request", host.requests.isNotEmpty())
+                cancellation.cancel()
+                assertNull(future.get(2, TimeUnit.SECONDS))
+            } finally {
+                releaseHost.countDown()
+                pool.shutdownNow()
+            }
         }
     }
 

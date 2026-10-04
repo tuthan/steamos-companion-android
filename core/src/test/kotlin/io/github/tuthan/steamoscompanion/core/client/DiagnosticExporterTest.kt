@@ -11,12 +11,15 @@ import io.github.tuthan.steamoscompanion.core.protocol.HostListenerCheck
 import io.github.tuthan.steamoscompanion.core.protocol.HostSelfCheck
 import io.github.tuthan.steamoscompanion.core.protocol.HostVersionsCheck
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
+import io.github.tuthan.steamoscompanion.core.protocol.LinkConnector
+import io.github.tuthan.steamoscompanion.core.protocol.LinkFacts
 import io.github.tuthan.steamoscompanion.core.protocol.SteamBridgeState
 import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.protocol.jsonObject
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -109,5 +112,41 @@ class DiagnosticExporterTest {
         assertTrue(text.contains("\"authenticated_read_present\":true"))
         listOf("self_check", "selfCheck", "c0ffee11", "198.51.100.77", "marker_method", "PLUGIN_MARKER_9.9.9")
             .forEach { assertFalse("Exported $it", text.contains(it)) }
+    }
+
+    /**
+     * The DRM link facts are advisory, in-memory data held beside the status observation, not in it. Nothing
+     * the exporter reads can carry them, and the export must not gain any of their facts.
+     */
+    @Test fun linkFactsAreNeverExported() {
+        val host = testActiveHost()
+        val reading = LinkFactsReading(StatusObservationSource.from(host), "topology-marker", LinkFacts(
+            true, "OBSERVED_MARKER", "REASON_MARKER", listOf(LinkConnector("HDMI-MARKER-1", "drm:card7", "DISPLAY_NAME_MARKER", "MRK", 31337,
+                isInternal = false, connected = true, resolutions = listOf("7777x8888"), steamOutputId = "OUTPUT_MARKER"))))
+        val status = VersionedPayload.Status(host.hostId, "boot-1", WireValue.Known(SteamBridgeState.READY),
+            mapOf("suspend" to WireValue.Known(CapabilityState.AVAILABLE)), WireValue.Known(SunshineState.RUNNING), jsonObject())
+        val text = DiagnosticExporter.encode(
+            StateLoadResult.Ready(PersistentState(activeHost = host)),
+            StatusPollState(lastRead = PairedStatusRead(status, null, null), lastSuccessMonotonicNanos = 1,
+                source = StatusObservationSource.from(host)), 10,
+        ).toString(Charsets.UTF_8)
+
+        assertNotNull(reading.factsFor(host, "topology-marker"))
+        assertTrue(text.contains("\"authenticated_read_present\":true"))
+        listOf(
+            "\"drm\"", "linkFacts", "LinkFacts", "link_facts", "resolutions", "steam_output_id", "gpu_id", "monitor_vendor",
+            "HDMI-MARKER-1", "card7", "DISPLAY_NAME_MARKER", "31337", "7777x8888", "OUTPUT_MARKER", "OBSERVED_MARKER", "REASON_MARKER",
+        ).forEach { assertFalse("Exported $it", text.contains(it)) }
+    }
+
+    /** No type that is saved to encrypted state, journaled, or exported has a place to put the facts. */
+    @Test fun persistedAndExportedModelsHaveNoLinkFactsField() {
+        listOf(
+            PersistentState::class.java, ActiveHost::class.java, JournalEntry::class.java, PairingCandidate::class.java,
+            StatusPollState::class.java, PairedStatusRead::class.java,
+        ).forEach { type ->
+            val offending = type.declaredFields.filter { "Link" in it.genericType.typeName }
+            assertTrue("${type.simpleName} has a link-facts field: $offending", offending.isEmpty())
+        }
     }
 }
