@@ -29,7 +29,8 @@ class PinnedStatusGateway(
     private val repository: EncryptedStateRepository,
 ) : PairedStatusGateway {
     override fun read(host: ActiveHost, cancellation: CancellationSignal): PairedStatusRead {
-        require("status.read" in host.grantedScopes) { "Status permission was not granted" }
+        // The host enforces status.read itself. A pairing it now reports without it must keep polling, or a later
+        // grant could never be learned; this snapshot's scopes may also be older than what the host last said.
         val endpoint = HostEndpoint.parse(host.endpoint)
         val paths = networks.activeLanPaths().let { active ->
             val preferred = host.wakeTarget.interfaceName
@@ -86,6 +87,13 @@ class PinnedStatusGateway(
         if (saved.lastObservedBootId != status.bootId) {
             val stored = repository.recordObservedBootId(host, status.bootId)
             if (stored !is StateCommitResult.Saved) throw IllegalStateException("Active pairing changed during status read")
+        }
+        if (cancellation.isCancelled) throw IOException("Status read cancelled")
+        // The owner can change this pairing's scopes after pairing; the host's word wins, up or down. A host that
+        // does not say (an older one) leaves what is stored alone.
+        val adopted = repository.recordReportedScopes(host, status.credentialScopes)
+        if (adopted != null && adopted !is StateCommitResult.Saved) {
+            throw IllegalStateException("Granted permissions could not be saved for this pairing")
         }
         if (cancellation.isCancelled) throw IOException("Status read cancelled")
         var outputsError: String? = null

@@ -89,6 +89,29 @@ class EncryptedStateRepository(
         }
     }
 
+    /**
+     * Adopt the scopes the host reported for this credential. The owner can change them after pairing, so the host's
+     * word wins in both directions, and an empty list is kept as the answer it is. A null [reported] means the host
+     * did not say (an older one): nothing is read or written and the result is null. Nothing is written when the
+     * stored list already matches, so a status poll does not rewrite the state.
+     */
+    fun recordReportedScopes(expectedHost: ActiveHost, reported: List<String>?): StateCommitResult? {
+        val scopes = reported ?: return null
+        try { expectedHost.copy(grantedScopes = scopes).validated() }
+        catch (_: IllegalArgumentException) { return StateCommitResult.Rejected(StateInvariantCode.INVALID_FIELD) }
+        val loaded = load()
+        if (loaded is StateLoadResult.Ready && sameActiveCredential(loaded.state.activeHost, expectedHost) &&
+            loaded.state.activeHost?.grantedScopes == scopes
+        ) return StateCommitResult.Saved(loaded.state)
+        return transact { state ->
+            val active = state.activeHost
+            if (!sameActiveCredential(active, expectedHost)) {
+                throw StateInvariantException(StateInvariantCode.INVALID_IDENTITY, "Granted scopes belong to a replaced host identity")
+            }
+            state.copy(activeHost = active!!.copy(grantedScopes = scopes))
+        }
+    }
+
     private fun sameActiveCredential(active: ActiveHost?, expected: ActiveHost): Boolean =
         active != null && active.hostId == expected.hostId && active.clientId == expected.clientId &&
             active.endpoint == expected.endpoint && active.certificatePin == expected.certificatePin &&

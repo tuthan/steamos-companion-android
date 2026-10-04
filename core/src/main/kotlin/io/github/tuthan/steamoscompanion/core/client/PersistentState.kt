@@ -85,7 +85,8 @@ data class ActiveHost(
         validateEndpoint(endpoint)
         validatePin(certificatePin)
         requireSecret(bearerToken, "bearer token", 512)
-        validateScopes(grantedScopes)
+        // The host can drop every scope after pairing, and its word wins, so an active pairing may hold none.
+        validateScopes(grantedScopes, allowEmpty = true)
         wakeTarget.validated()
         lastObservedBootId?.let { requireText(it, "host boot ID", 128) }
         cachedRecoveryProfiles?.let { profiles ->
@@ -461,9 +462,9 @@ private fun validatePin(value: String) {
     if (!Regex("sha256:[0-9a-f]{64}").matches(value)) invalid(StateInvariantCode.INVALID_FIELD, "Invalid certificate pin")
 }
 
-private fun validateScopes(values: List<String>) {
+private fun validateScopes(values: List<String>, allowEmpty: Boolean = false) {
     val allowed = setOf("status.read", "power.control", "display.control")
-    if (values.isEmpty() || values.size > allowed.size || values.distinct().size != values.size || values.any { it !in allowed }) {
+    if ((values.isEmpty() && !allowEmpty) || values.size > allowed.size || values.distinct().size != values.size || values.any { it !in allowed }) {
         invalid(StateInvariantCode.INVALID_FIELD, "Invalid granted scopes")
     }
 }
