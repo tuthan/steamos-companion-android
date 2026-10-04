@@ -18,6 +18,8 @@ KOTLIN_TESTS = ROOT / "core" / "src" / "test" / "kotlin"
 INDEX = "fixtures/contract/index.json"  # the fixture catalogue itself, not a case
 STANDALONE_FIXTURES = {
     "fixtures/pairing-payload.json": ("PairingModelsTest", "hostBundledQrPayloadFixtureParsesWithTheAndroidClientValidator"),
+    # GET /v1/operations (list) is pinned for the decoder only; the Android client never calls it.
+    "fixtures/operations-list.json": ("ProtocolValidationTest", "hostOperationListFixtureEntriesParseWithTheOperationDecoder"),
 }
 
 # The closed route set dispatched by host/backend/service.py handle_http at the pinned commit.

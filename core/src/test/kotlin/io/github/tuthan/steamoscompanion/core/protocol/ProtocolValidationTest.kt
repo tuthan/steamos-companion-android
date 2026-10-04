@@ -8,6 +8,18 @@ import org.junit.Assert.assertThrows
 
 class ProtocolValidationTest {
     @Test
+    fun hostOperationListFixtureEntriesParseWithTheOperationDecoder() {
+        val fixture = BoundedJson.parseObject(
+            ProtocolFixtureAssertions.readResource("fixtures/operations-list.json"))
+        val operations = fixture["operations"].asArray("operations")
+            .map { ProtocolCodec.parseOperation(it.asObject("operation")) }
+
+        assertEquals(listOf("op-save-current", "op-host-display-selection"), operations.map { it.id })
+        assertEquals(WireValue.Known(OperationState.SUCCEEDED), operations.first().state)
+        assertEquals("display.selection.preview", operations.last().kind)
+    }
+
+    @Test
     fun displayOutputAcceptsEmptyLabelsPermittedByHostSchema() {
         val fixture = BoundedJson.parseObject(
             ProtocolFixtureAssertions.readResource("fixtures/contract/display-outputs/available.json"))

@@ -1,8 +1,8 @@
 {
-  "branch": "protocol/android-contract-fixtures",
-  "commit": "804ebf1864f391358183dfcd1cacf61e289862e8",
+  "branch": "main",
+  "commit": "40c97ac194b79424813c2aa840a78e545183a15d",
   "files": {
-    "README.md": "9d84bb7367c4204d1d5cb2337f922ed37da749881f71ebd2ae13595597e07073",
+    "README.md": "6f5cd1bd77715c22daa15896a008b47de93e7c62dc31e7e1648a15f0ae01b24d",
     "fixtures/contract/discovery/ready.json": "3591c0548215e59eac8c0e61f4794e83d1a491cfd4228a446120113c238d192f",
     "fixtures/contract/discovery/tls-unavailable.json": "ae4944c0df16e607dadecebf2b25bec83373dc557a1dd3fb160eb3f062bbea3b",
     "fixtures/contract/display-confirm/confirmed.json": "5a4f08ea393161b9d2cbfb72be8f1c8713dfa6fff6dd524a1e0cb208cae80f35",
@@ -138,6 +138,7 @@
     "fixtures/contract/unsupported/unknown-path-get-authenticated.json": "ce53fdf300445016be68070b3c05f09566135a6ff289af24665f1d956fe7d775",
     "fixtures/contract/unsupported/unknown-path-get-unauthenticated.json": "32beed5010b30eb6f0477e1e93d79d289a446b4ec189463ec16a963398ba2b2c",
     "fixtures/contract/unsupported/unknown-path-post.json": "fd098917e40c6a4589848a41ebb7142ae982b0bb7c18a6354f5c98d659a4465a",
+    "fixtures/operations-list.json": "0258b1ad95709db7ec74067c15a902f9fa4f1eb6cb70ed6449d66f64b754bbac",
     "fixtures/outputs-working.json": "98cbae01655efaf97724bdea5c3d956cbf747e3d55c27bbf8e3639d74f26bafc",
     "fixtures/pairing-payload.json": "5124857c831902ba77d7afb4337b815a4d9b849560c30a7e31375403dbda88ae",
     "fixtures/status-steam-unavailable.json": "edb304a0fc2f61abad45bfc539d960bfb86e3ff28a720a7e030c61f63d40dcaf",
@@ -145,10 +146,10 @@
     "fixtures/status-sunshine-running.json": "0e62ff74c77127a3c9bba76318c2aeb3bc2312c620daa327296a05ebcd210823",
     "fixtures/status-sunshine-stopped.json": "b57b9a4e1438907bc70bc59dd80ff9e2287537c87c7b92b216c3dffde30754ee",
     "fixtures/status-sunshine-unknown.json": "54cb9ca7d0d0529a51b26ac76d6468092ae029f731d4b39e8eddfe0f70776a59",
-    "schema.json": "1e0331c2da1d0ddedbcd14ee075e5da7322b86c16b97e60bbc2622d6a21f5485"
+    "schema.json": "9321c314d53abee312a5a498908d04c3a0be2a76ea90f01f95af4dccf75e1204"
   },
-  "host_behavior": "v0.5.16 (9c213b31cdce36e67784355be21e2fc1b2b7570f); host/backend unchanged in protocol fixture commit 804ebf1864f391358183dfcd1cacf61e289862e8",
-  "protocol_tree": "4b661630f69bf7f2752862112f7f35288f571b18",
+  "host_behavior": "v0.5.18 (f4d4c57ef1e9d4d34e72d6eb44195b510c9aa86b); host/backend unchanged by the contract-fixture merge",
+  "protocol_tree": "e5463866c87943c2602ae938fa428e0224f3b7c6",
   "repository": "https://github.com/tuthan/steamos-companion-decky",
   "tag": null
 }
