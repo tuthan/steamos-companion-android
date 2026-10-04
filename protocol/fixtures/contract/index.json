@@ -354,6 +354,22 @@
       "error": "unauthorized"
     },
     {
+      "case": "status/view-only-credential",
+      "file": "status/view-only-credential.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "status/scopes-changed-by-owner",
+      "file": "status/scopes-changed-by-owner.json",
+      "method": "GET",
+      "path": "/v1/status",
+      "status": 200,
+      "error": null
+    },
+    {
       "case": "status/sunshine-disabled",
       "file": "status/sunshine-disabled.json",
       "method": "GET",
@@ -940,6 +956,14 @@
     {
       "case": "power/forbidden-scope",
       "file": "power/forbidden-scope.json",
+      "method": "POST",
+      "path": "/v1/power",
+      "status": 403,
+      "error": "forbidden"
+    },
+    {
+      "case": "power/forbidden-after-owner-removed-scope",
+      "file": "power/forbidden-after-owner-removed-scope.json",
       "method": "POST",
       "path": "/v1/power",
       "status": 403,

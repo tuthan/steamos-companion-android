@@ -144,6 +144,7 @@ class PairingRequestContractTest {
 class PowerContractTest {
     @Test fun accepted() = ProtocolFixtureAssertions.assertContractFixture("power/accepted")
     @Test fun bridgeUnavailable() = ProtocolFixtureAssertions.assertContractFixture("power/bridge-unavailable")
+    @Test fun forbiddenAfterOwnerRemovedScope() = ProtocolFixtureAssertions.assertContractFixture("power/forbidden-after-owner-removed-scope")
     @Test fun forbiddenScope() = ProtocolFixtureAssertions.assertContractFixture("power/forbidden-scope")
     @Test fun idempotentReplay() = ProtocolFixtureAssertions.assertContractFixture("power/idempotent-replay")
     @Test fun invalidAction() = ProtocolFixtureAssertions.assertContractFixture("power/invalid-action")
@@ -175,6 +176,7 @@ class StatusContractTest {
     @Test fun legacyBodySunshineStopped() = ProtocolFixtureAssertions.assertLegacyBody("fixtures/status-sunshine-stopped.json", ApiRoute.STATUS)
     @Test fun legacyBodySunshineUnknown() = ProtocolFixtureAssertions.assertLegacyBody("fixtures/status-sunshine-unknown.json", ApiRoute.STATUS)
     @Test fun rateLimited() = ProtocolFixtureAssertions.assertContractFixture("status/rate-limited")
+    @Test fun scopesChangedByOwner() = ProtocolFixtureAssertions.assertContractFixture("status/scopes-changed-by-owner")
     @Test fun selfCheckCertificateUnusable() = ProtocolFixtureAssertions.assertContractFixture("status/self-check-certificate-unusable")
     @Test fun selfCheckPluginVersionUnknown() = ProtocolFixtureAssertions.assertContractFixture("status/self-check-plugin-version-unknown")
     @Test fun selfCheckSteamTemperature() = ProtocolFixtureAssertions.assertContractFixture("status/self-check-steam-temperature")
@@ -188,6 +190,7 @@ class StatusContractTest {
     @Test fun sunshineUnknown() = ProtocolFixtureAssertions.assertContractFixture("status/sunshine-unknown")
     @Test fun unauthorizedInvalid() = ProtocolFixtureAssertions.assertContractFixture("status/unauthorized-invalid")
     @Test fun unauthorizedMissing() = ProtocolFixtureAssertions.assertContractFixture("status/unauthorized-missing")
+    @Test fun viewOnlyCredential() = ProtocolFixtureAssertions.assertContractFixture("status/view-only-credential")
 }
 
 class SunshineContractTest {

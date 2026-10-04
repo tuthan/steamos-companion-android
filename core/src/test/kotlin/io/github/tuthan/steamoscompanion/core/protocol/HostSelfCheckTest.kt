@@ -19,7 +19,7 @@ class HostSelfCheckTest {
         val cases = index["cases"].asArray("cases").map { it.asObject("case") }.filter {
             it["path"].asString("path") == "/v1/status" && it["status"].asLong("status") == 200L
         }.map { it["case"].asString("case") }
-        assertEquals(11, cases.size)
+        assertEquals(13, cases.size)
         cases.forEach { name ->
             val check = status(name.removePrefix("status/")).selfCheck
             assertNotNull("$name must expose self_check", check)
