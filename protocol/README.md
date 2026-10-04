@@ -322,7 +322,9 @@ Redaction (applied identically by every client):
   from the oldest end until it fits and `truncated` is set.
 - **Never fail:** a malformed body yields a null section, not an error.
 
-Vector cases marked `"strict": true` must match exactly. `hostile-shape` is
+Vector cases marked `"strict": true` use only bodies the wire schema allows
+(a Decky test enforces it) and journal targets of at most eight keys, so every
+compliant client's own decoder reaches them, and they must match exactly. `hostile-shape` is
 `"strict": false`: the body is malformed, so a client whose own decoder refuses
 it may report that section as `null`, but it must not fail and must not repeat
 any identifier, address, pin or token from the input.

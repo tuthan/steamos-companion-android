@@ -53,12 +53,7 @@ sealed interface JournalValue {
 internal object HostJournalDecoder {
     /** The schema's `maxItems`; a longer list is not a conforming host, so it is not shown at all. */
     const val MAX_WIRE_RECORDS = 256
-    /**
-     * The first keys of a record's `target` that are kept. The redacted diagnostic report names fourteen of them
-     * (eleven scalars, two string lists and `mode`), so a record that carries every one of them, whatever the
-     * host sent first, still reaches the report; the schema leaves `target` unbounded.
-     */
-    const val MAX_TARGET_KEYS = 16
+    const val MAX_TARGET_KEYS = 8
     const val MAX_TARGET_LIST = 16
     const val MAX_TARGET_GROUP = 6
     const val MAX_TARGET_TEXT = 128

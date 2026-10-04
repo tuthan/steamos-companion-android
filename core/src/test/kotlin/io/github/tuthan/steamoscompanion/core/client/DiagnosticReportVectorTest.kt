@@ -22,8 +22,9 @@ import org.junit.Test
  * Every case gives the four response bodies a report is built from and the exact `report` every client must rebuild.
  * Each body is decoded with the app's own decoder ([ProtocolCodec]), the decoded readings go through
  * [DiagnosticReport.compose], and the compact JSON is compared byte for byte (so key order counts) with the
- * reference's. Strict cases must match exactly. `hostile-shape` is non-strict: a client whose decoder refuses a
- * body may report that section as null.
+ * reference's. Strict cases use only bodies the wire schema allows, so the app's decoders must accept every body of
+ * every one of them (no exception list) and the report must match exactly. `hostile-shape` is non-strict: a client
+ * whose decoder refuses a body may report that section as null.
  */
 class DiagnosticReportVectorTest {
     private val vector: JsonValue.ObjectValue by lazy {
@@ -50,7 +51,7 @@ class DiagnosticReportVectorTest {
         /** The report composed from what the app held. */
         fun compose(): JsonValue.ObjectValue = DiagnosticReport.compose(readings)
 
-        /** The same, but with the outputs body even when the strict decoder refused it. */
+        /** The same, but with the outputs body even when the decoder refused it (only the non-strict case has such a body). */
         fun composeWithRawOutputs(): JsonValue.ObjectValue = DiagnosticReport.compose(
             readings.status?.body, readings.outputs?.body ?: bodies[Slot.OUTPUTS], readings.linkFacts, readings.journal,
         )
@@ -125,40 +126,70 @@ class DiagnosticReportVectorTest {
 
     // --- rebuilding it --------------------------------------------------------------------------------------------------
 
+    /**
+     * What the app holds is what the report is built from: the retained response bodies for the status and the display
+     * outputs (the decoded `HostSelfCheck` turns the plugin version "unknown" into null and `DisplayOutputSummary` keeps
+     * no `description`, both of which the report names) and the decoded link facts and journal.
+     */
     @Test fun everyStrictCaseRebuildsTheReferenceReportByteForByte() {
         assertEquals(7, strictNames.size)
         for (name in strictNames) {
-            val got = decode(name).composeWithRawOutputs()
+            val got = decode(name).compose()
             val want = expected(name)
             // Section by section first, so a failure names the section; then the whole compact text, which also pins key order.
             for (section in listOf("host", "outputs", "link", "journal")) {
                 assertEquals("$name.$section", compact(want[section]!!), compact(got[section]!!))
             }
             assertEquals(name, compact(want), compact(got))
-            // What the app holds, with no help from the retained outputs body, is the same report wherever the decoders accept it.
-            if (name != "hostile-text") assertEquals("$name (as the app holds it)", compact(want), compact(decode(name).compose()))
         }
     }
 
     /**
-     * The app's decoders accept every body of every strict case but one: `hostile-text` has eleven display outputs
-     * and an empty `current_mode_id`, both schema-valid, and [ProtocolCodec] refuses a display inventory of more than
-     * eight outputs or an empty id ("Too many display outputs"). That is the display screen's own bound and is not
-     * changed for a report; the report is rebuilt from the retained response body, so the strict case is still exact,
-     * but in the app a body the decoder refuses is never held and its section is null.
+     * Every body of every strict case is accepted by [ProtocolCodec] and the app's decoders: no refusal, a reading for
+     * every body the case supplies, and no record, connector or output dropped on the way. If a decoder rule refuses a
+     * strict body, this fails naming the case, the body and the decoder's message; it is not worked around.
      */
-    @Test fun theAppsDecodersRefuseOnlyTheseVectorBodies() {
+    @Test fun theAppsDecodersAcceptEveryBodyOfEveryStrictCase() {
+        val slotsSeen = linkedSetOf<Slot>()
+        for (name in strictNames) {
+            val decoded = decode(name)
+            assertEquals("$name refusals", emptyMap<Slot, String>(), decoded.refusals)
+            val readings = decoded.readings
+            val body = decoded.bodies
+            assertEquals("$name status", body[Slot.STATUS] != null, readings.status != null)
+            assertEquals("$name outputs", body[Slot.OUTPUTS] != null, readings.outputs != null)
+            assertEquals("$name drm", body[Slot.DRM] != null, readings.linkFacts != null)
+            assertEquals("$name operations", body[Slot.OPERATIONS] != null, readings.journal != null)
+            body.filterValues { it != null }.keys.forEach { slotsSeen += it }
+
+            readings.status?.let {
+                assertEquals("$name self_check", body.getValue(Slot.STATUS)!!["self_check"] is JsonValue.ObjectValue, it.selfCheck != null)
+            }
+            readings.outputs?.let {
+                assertEquals("$name outputs kept", body.getValue(Slot.OUTPUTS)!!["outputs"].asArray("outputs").size, it.outputs.size)
+            }
+            readings.linkFacts?.let {
+                val sent = body.getValue(Slot.DRM)!!["drm"].asObject("drm")["connectors"].asArray("connectors").size
+                assertEquals("$name connectors kept", sent, it.connectors.size)
+            }
+            readings.journal?.let {
+                assertEquals("$name records kept", body.getValue(Slot.OPERATIONS)!!["operations"].asArray("operations").size, it.records.size)
+            }
+        }
+        assertEquals("every kind of body is exercised by a strict case", Slot.entries.toSet(), slotsSeen)
+    }
+
+    /**
+     * `hostile-shape` is the only case a decoder refuses, which its non-strict rule allows: its status body has no
+     * `steam_bridge` and its display inventory has more than eight outputs, so the app holds neither and both
+     * sections are null. Pinned, so a decoder change that moves a refusal is noticed.
+     */
+    @Test fun onlyTheNonStrictCaseHasBodiesTheDecodersRefuse() {
         val refused = cases.keys.associateWith { name -> decode(name).refusals.mapKeys { it.key.key } }.filterValues { it.isNotEmpty() }
-        assertEquals(setOf("hostile-text", "hostile-shape"), refused.keys)
-        assertEquals(setOf("outputs"), refused.getValue("hostile-text").keys)
-        assertTrue(refused.getValue("hostile-text").getValue("outputs").contains("Too many display outputs"))
+        assertEquals(setOf("hostile-shape"), refused.keys)
         assertEquals(setOf("status", "outputs"), refused.getValue("hostile-shape").keys)
         assertTrue(refused.getValue("hostile-shape").getValue("status").contains("steam_bridge"))
         assertTrue(refused.getValue("hostile-shape").getValue("outputs").contains("Too many display outputs"))
-        // What the app would hold, and so what the app's own report says, for the strict case it cannot decode in full.
-        val inApp = decode("hostile-text").compose()
-        assertEquals(JsonValue.NullValue, inApp["outputs"])
-        assertEquals(compact(expected("hostile-text")["journal"]!!), compact(inApp["journal"]!!))
     }
 
     @Test fun hostileShapeNeverFailsLeaksNothingAndEachSectionIsTheReferenceNullOrADecoderReduction() {
@@ -171,11 +202,13 @@ class DiagnosticReportVectorTest {
         // decoder refuses it (host null); the outputs body is refused too (more than eight outputs), so the app holds
         // none (null); the link decoder drops every connector the schema does not describe (none of the fourteen sent
         // has is_internal and connected as booleans), which is a record-level reduction, not the reference's eight;
-        // the journal decodes exactly.
+        // every journal record carries a nine-key `target` and the journal decoder keeps a target's first eight keys,
+        // so each record is the reference's without its ninth key.
         assertEquals(
-            mapOf("host" to Outcome.NULL, "outputs" to Outcome.NULL, "link" to Outcome.REDUCED, "journal" to Outcome.EXACT),
+            mapOf("host" to Outcome.NULL, "outputs" to Outcome.NULL, "link" to Outcome.REDUCED, "journal" to Outcome.TARGETS_REDUCED),
             outcomes,
         )
+        assertEquals(setOf("action"), droppedTargetKeys(got["journal"]!!, want["journal"]!!))
         assertNoForbiddenValues("hostile-shape", compact(got), decoded.bodies.values.toList())
         // Handed the retained response bodies directly, the composer reproduces the reference for what it reads from them.
         val raw = decoded.composeWithRawOutputs()
@@ -184,15 +217,48 @@ class DiagnosticReportVectorTest {
         assertEquals(compact(want["host"]!!), compact(rawHost["host"]!!))
     }
 
-    private enum class Outcome { EXACT, NULL, REDUCED, MISMATCH }
+    private enum class Outcome { EXACT, NULL, REDUCED, TARGETS_REDUCED, MISMATCH }
 
-    /** Equal, null, or the reference with whole records dropped: same other fields, records in the reference's order. */
+    /**
+     * Equal, null, the reference with whole records dropped (same other fields, records in the reference's order), or
+     * the reference with a record's `target` cut to the keys the decoder keeps (see [droppedTargetKeys]).
+     */
     private fun outcome(got: JsonValue, want: JsonValue): Outcome = when {
         compact(got) == compact(want) -> Outcome.EXACT
         got == JsonValue.NullValue -> Outcome.NULL
         got is JsonValue.ObjectValue && want is JsonValue.ObjectValue && listOf("connectors", "records").any { isReduction(got, want, it) } ->
             Outcome.REDUCED
+        got is JsonValue.ObjectValue && want is JsonValue.ObjectValue && isTargetReduction(got, want) -> Outcome.TARGETS_REDUCED
         else -> Outcome.MISMATCH
+    }
+
+    private fun records(journal: JsonValue) = (journal as? JsonValue.ObjectValue)?.get("records") as? JsonValue.ArrayValue
+
+    /** The same journal, record for record, except that a record's `target` has fewer keys (the others in the same order and equal). */
+    private fun isTargetReduction(got: JsonValue.ObjectValue, want: JsonValue.ObjectValue): Boolean {
+        val gotRecords = records(got)?.values ?: return false
+        val wantRecords = records(want)?.values ?: return false
+        if (got.fields.filterKeys { it != "records" } != want.fields.filterKeys { it != "records" } || gotRecords.size != wantRecords.size) return false
+        var reduced = false
+        for ((g, w) in gotRecords.zip(wantRecords)) {
+            if (g !is JsonValue.ObjectValue || w !is JsonValue.ObjectValue) return false
+            if (g.fields.filterKeys { it != "target" } != w.fields.filterKeys { it != "target" }) return false
+            val gotTarget = (g["target"] as? JsonValue.ObjectValue)?.fields.orEmpty()
+            val wantTarget = (w["target"] as? JsonValue.ObjectValue)?.fields.orEmpty()
+            val kept = wantTarget.entries.filter { gotTarget[it.key] == it.value }
+            if (gotTarget.keys.toList() != kept.map { it.key } || gotTarget.size > wantTarget.size) return false
+            if (gotTarget.size < wantTarget.size) reduced = true
+        }
+        return reduced
+    }
+
+    /** The target keys the reference reports and the app's journal does not, over all records. */
+    private fun droppedTargetKeys(got: JsonValue, want: JsonValue): Set<String> {
+        val gotRecords = records(got)!!.values
+        return records(want)!!.values.zip(gotRecords).flatMap { (w, g) ->
+            val gotTarget = (g.asObject("record")["target"] as? JsonValue.ObjectValue)?.fields.orEmpty()
+            (w.asObject("record")["target"] as? JsonValue.ObjectValue)?.fields.orEmpty().keys - gotTarget.keys
+        }.toSet()
     }
 
     private fun isReduction(got: JsonValue.ObjectValue, want: JsonValue.ObjectValue, listKey: String): Boolean {
