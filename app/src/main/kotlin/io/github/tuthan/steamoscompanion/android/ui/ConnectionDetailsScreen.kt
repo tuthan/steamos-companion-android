@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import io.github.tuthan.steamoscompanion.R
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.CandidatePhase
+import io.github.tuthan.steamoscompanion.core.client.HostHealthUnavailableReason
+import io.github.tuthan.steamoscompanion.core.client.HostHealthView
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.PairingCandidate
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
@@ -45,6 +47,8 @@ fun ConnectionDetailsScreen(
     wakeRelay: String = "",
     suggestedWakeRelay: String = "",
     onSaveWakeRelay: (String) -> Boolean = { false },
+    /** Projected from the paired session's latest status observation by `HostHealthPresentation`. */
+    hostHealth: HostHealthView = HostHealthView.Unavailable(HostHealthUnavailableReason.CHECKING),
 ) {
     val palette = LocalCompanionPalette.current
     var replacementIntent by remember(StatusObservationSource.from(host)) { mutableStateOf<ReplacementIntent?>(null) }
@@ -62,6 +66,7 @@ fun ConnectionDetailsScreen(
     StatusLine(if (fresh) "Status checked recently" else "Latest status not confirmed",
         if (status.unreachable) StatusTone.WARNING else if (fresh) StatusTone.GOOD else StatusTone.UNKNOWN,
         glyph = if (status.unreachable) StatusGlyph.BLOCKED else if (fresh) StatusGlyph.DOT else StatusGlyph.CLOCK)
+    HostHealthSection(hostHealth)
     if (host.wakeTarget.available) {
         Kicker("Device", Modifier.padding(top = 8.dp))
         FactTable { FactRow("Wake target", host.wakeTarget.interfaceName ?: "Configured", divider = false) }

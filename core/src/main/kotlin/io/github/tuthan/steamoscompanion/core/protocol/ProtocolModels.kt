@@ -303,6 +303,8 @@ sealed interface VersionedPayload {
         val capabilities: Map<String, WireValue<CapabilityState>>,
         val sunshineState: WireValue<SunshineState>,
         val body: JsonValue.ObjectValue,
+        /** Optional host self-check; null when the host omits it or sends nothing usable. Never persisted. */
+        val selfCheck: HostSelfCheck? = null,
     ) : VersionedPayload
     data class DisplayOutputs(
         val available: Boolean,

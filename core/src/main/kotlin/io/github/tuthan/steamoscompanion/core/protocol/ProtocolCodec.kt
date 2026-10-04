@@ -223,7 +223,8 @@ object ProtocolCodec {
             "restarting" -> WireValue.Known(SunshineState.RESTARTING)
             else -> WireValue.Unknown(sunshineText)
         }
-        return VersionedPayload.Status(hostId, bootId, bridge, capabilities, sunshineState, body)
+        return VersionedPayload.Status(hostId, bootId, bridge, capabilities, sunshineState, body,
+            selfCheck = HostSelfCheckDecoder.decode(body["self_check"]))
     }
 
     private fun parseDisplayOutputs(body: JsonValue.ObjectValue): VersionedPayload.DisplayOutputs {

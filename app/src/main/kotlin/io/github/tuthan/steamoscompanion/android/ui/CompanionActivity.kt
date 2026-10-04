@@ -58,6 +58,7 @@ import io.github.tuthan.steamoscompanion.core.pairing.PairingAction
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.DisplayInventory
+import io.github.tuthan.steamoscompanion.core.client.HostHealthPresentation
 import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
 import io.github.tuthan.steamoscompanion.core.client.PendingDisplayResult
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
@@ -419,6 +420,8 @@ private fun CompanionRoot(
                     persisted?.activeHost ?: host, runtime.aliasStore.get(host) ?: host.endpoint,
                     persisted, status, phase10Busy, phase10Feedback, onPairAnother,
                     onConfirmReplacement, onDiscardReplacement, onRevoke, onForget, onExport,
+                    hostHealth = HostHealthPresentation.project(persisted?.activeHost ?: host, status,
+                        runtime.clock.wallTimeMillis()),
                     wakeRelay = runtime.wakeRelayStore.get(host)?.format().orEmpty(),
                     suggestedWakeRelay = remember(status.lastSuccessMonotonicNanos) {
                         runCatching { WakeRelay.suggestionFrom(runtime.networkAccess.activeLanPaths()) }

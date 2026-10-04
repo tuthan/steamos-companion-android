@@ -4,7 +4,17 @@ import io.github.tuthan.steamoscompanion.core.protocol.ApiRequest
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
 import io.github.tuthan.steamoscompanion.core.protocol.BoundedJson
 import io.github.tuthan.steamoscompanion.core.protocol.HttpMethod
+import io.github.tuthan.steamoscompanion.core.protocol.CapabilityState
+import io.github.tuthan.steamoscompanion.core.protocol.HostBridgeCheck
+import io.github.tuthan.steamoscompanion.core.protocol.HostCertificateCheck
+import io.github.tuthan.steamoscompanion.core.protocol.HostListenerCheck
+import io.github.tuthan.steamoscompanion.core.protocol.HostSelfCheck
+import io.github.tuthan.steamoscompanion.core.protocol.HostVersionsCheck
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
+import io.github.tuthan.steamoscompanion.core.protocol.SteamBridgeState
+import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
+import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
+import io.github.tuthan.steamoscompanion.core.protocol.WireValue
 import io.github.tuthan.steamoscompanion.core.protocol.jsonObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,5 +84,30 @@ class DiagnosticExporterTest {
         assertFalse(text.contains("TOKEN_SECRET_IN_ERROR"))
         assertFalse(text.contains("TOKEN_SECRET_IN_STATUS"))
         assertFalse(text.contains(host.bearerToken))
+    }
+
+    /** The host self-check is live status data; the export must not gain any of its facts. */
+    @Test fun hostSelfCheckFactsAreNeverExported() {
+        val host = testActiveHost()
+        val selfCheck = HostSelfCheck(
+            certificate = HostCertificateCheck(true, "c0ffee11", null, null),
+            listener = HostListenerCheck(true, "198.51.100.77", 18443),
+            bridge = HostBridgeCheck(true, listOf("marker_method")),
+            temperature = null,
+            provider = null,
+            versions = HostVersionsCheck(1, "PLUGIN_MARKER_9.9.9"),
+        )
+        val status = VersionedPayload.Status(host.hostId, "boot-1", WireValue.Known(SteamBridgeState.READY),
+            mapOf("suspend" to WireValue.Known(CapabilityState.AVAILABLE)), WireValue.Known(SunshineState.RUNNING),
+            jsonObject(), selfCheck)
+        val text = DiagnosticExporter.encode(
+            StateLoadResult.Ready(PersistentState(activeHost = host)),
+            StatusPollState(lastRead = PairedStatusRead(status, null, null), lastSuccessMonotonicNanos = 1,
+                source = StatusObservationSource.from(host)), 10,
+        ).toString(Charsets.UTF_8)
+
+        assertTrue(text.contains("\"authenticated_read_present\":true"))
+        listOf("self_check", "selfCheck", "c0ffee11", "198.51.100.77", "marker_method", "PLUGIN_MARKER_9.9.9")
+            .forEach { assertFalse("Exported $it", text.contains(it)) }
     }
 }
