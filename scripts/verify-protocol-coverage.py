@@ -31,6 +31,7 @@ PINNED_ROUTES = {
     "GET /v1/status",
     "GET /v1/display/outputs",
     "GET /v1/display/order",
+    "GET /v1/drm",
     "GET /v1/operations/{id}",
     "POST /v1/power",
     "POST /v1/display/order",

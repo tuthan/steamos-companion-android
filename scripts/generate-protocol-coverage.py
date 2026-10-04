@@ -29,6 +29,7 @@ TEST_CLASS = {
     "display-confirm": ("DisplayRecoveryContractTest", "confirm"),
     "display-restore": ("DisplayRecoveryContractTest", "restore"),
     "display-save-current": ("DisplayRecoveryContractTest", "saveCurrent"),
+    "drm": ("DrmContractTest", ""),
     "power": ("PowerContractTest", ""),
     "sunshine-restart": ("SunshineContractTest", ""),
     "operations": ("OperationContractTest", ""),

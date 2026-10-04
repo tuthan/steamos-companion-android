@@ -1,8 +1,8 @@
 {
   "branch": "main",
-  "commit": "51d92b35dc6c23603d3c0f394e50e7c218f3115c",
+  "commit": "10dc42216f8a2d1bfa8059f38120cc087f4a5dc4",
   "files": {
-    "README.md": "d67c6983cbf6ba4ceac34a082532363ed3dfdb6fcf22277228cdd64c0355868c",
+    "README.md": "1dfc4c499c7fcce0c8f52324ecb9909f9e63b4907eeb8d5632d7f1e8ee53e1d0",
     "fixtures/contract/discovery/ready.json": "3591c0548215e59eac8c0e61f4794e83d1a491cfd4228a446120113c238d192f",
     "fixtures/contract/discovery/tls-unavailable.json": "ae4944c0df16e607dadecebf2b25bec83373dc557a1dd3fb160eb3f062bbea3b",
     "fixtures/contract/display-confirm/confirmed.json": "5a4f08ea393161b9d2cbfb72be8f1c8713dfa6fff6dd524a1e0cb208cae80f35",
@@ -54,7 +54,12 @@
     "fixtures/contract/display-save-current/saved.json": "779affa48c4d2209c388641a3fdb3777fccb0b6cb88865444ad2056178680119",
     "fixtures/contract/display-save-current/stale-target.json": "08b4f1bebc84114f699f447884c230e785de646ad08fad895536d487d67757fd",
     "fixtures/contract/display-save-current/visible-false.json": "aaf63561719ca4995d975632fdf56a2e9cca7506db7d3f41da09420cf91bc5bb",
-    "fixtures/contract/index.json": "89117e76ebc3df106fdfc18cfb38ec562788fc7315ab243e6e88445db7703c05",
+    "fixtures/contract/drm/ambiguous-connector.json": "e684062a302fbd658e08572991d92dfedb61cd4b20d34daaaa6da34f805d201f",
+    "fixtures/contract/drm/available.json": "28a83ba96669836b0bc9ab2153e1213f5375fc8d0efdbc61233106363f0ea09c",
+    "fixtures/contract/drm/bridge-unavailable.json": "c5ce325ab76bf4fc4eff3155eb0f990ef4478360e2681aa422c1422a8fa77350",
+    "fixtures/contract/drm/no-connectors.json": "0e98a1c408cb3c1f3c835e4c21fc81f42223001f0212531954771a78fe84da3d",
+    "fixtures/contract/drm/unauthorized.json": "696dd8ee282d0f9db1bb9780359dfaa7bf58f064092136593f0d648b103a2cff",
+    "fixtures/contract/index.json": "48ca1b6e98e0aa6d2ea21bfb688ce2a8db954c1aa3ce66f68c4b5939ec48bd9b",
     "fixtures/contract/operations/accepted.json": "35b0d6c2336f66e631e9cdf3f42baf4e4c4734d85b4d897dcc8c58ef13ab0b60",
     "fixtures/contract/operations/display-preview-observed-return.json": "5d5bcc35eeab268bb370b41cc2ca65183e20c57f6164d35a9528289732c76bcf",
     "fixtures/contract/operations/display-restore-succeeded.json": "95389977f7ec6682ceb2dd91804e2c298e9d6203f8f1aae12549c1873de06c47",
@@ -149,10 +154,10 @@
     "fixtures/status-sunshine-running.json": "0e62ff74c77127a3c9bba76318c2aeb3bc2312c620daa327296a05ebcd210823",
     "fixtures/status-sunshine-stopped.json": "b57b9a4e1438907bc70bc59dd80ff9e2287537c87c7b92b216c3dffde30754ee",
     "fixtures/status-sunshine-unknown.json": "54cb9ca7d0d0529a51b26ac76d6468092ae029f731d4b39e8eddfe0f70776a59",
-    "schema.json": "8d0ece1e7baf6fd2f6c2817323d2a4ad7255b79bcfbda73dec323c1b66093b17"
+    "schema.json": "17485603a5f1058ea67e3543ae817d5ed870a4445aa4064a3d581a0e00bdac8c"
   },
-  "host_behavior": "main@51d92b3 (v0.5.18 release f4d4c57ef1e9d4d34e72d6eb44195b510c9aa86b plus the unreleased self_check block); host/backend changed only by selfcheck.py and its wiring (identity.py, coordinator.py, service.py)",
-  "protocol_tree": "4b669e697ceefbdb73a636d977a2f2aae76b09dc",
+  "host_behavior": "main@10dc422 (v0.5.18 release f4d4c57ef1e9d4d34e72d6eb44195b510c9aa86b plus the unreleased self_check block and GET /v1/drm); host/backend changed only by selfcheck.py, linkfacts.py and their wiring (identity.py, coordinator.py, service.py, client.py, client_core.py)",
+  "protocol_tree": "57fc21a5700d3e5b88fb9badb6671fcaa7c2688f",
   "repository": "https://github.com/tuthan/steamos-companion-decky",
   "tag": null
 }

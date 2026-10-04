@@ -85,6 +85,8 @@ object ProtocolCodec {
         ApiRoute.STATUS -> parseStatus(body)
         ApiRoute.DISPLAY_OUTPUTS -> parseDisplayOutputs(body)
         ApiRoute.DISPLAY_ORDER -> VersionedPayload.DisplayOrder(parseDisplayOrder(body), body)
+        // Advisory: a block that is absent, malformed or oversize is "no facts", never a failed read.
+        ApiRoute.DRM -> VersionedPayload.Drm(LinkFactsDecoder.decode(body["drm"]))
         ApiRoute.OPERATION -> VersionedPayload.Operation(parseOperation(body["operation"].asObject("operation")))
         else -> VersionedPayload.Mutation(
             operation = (body["operation"] as? JsonValue.ObjectValue)?.let(::parseOperation),

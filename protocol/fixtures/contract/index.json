@@ -554,6 +554,46 @@
       "error": null
     },
     {
+      "case": "drm/available",
+      "file": "drm/available.json",
+      "method": "GET",
+      "path": "/v1/drm",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "drm/ambiguous-connector",
+      "file": "drm/ambiguous-connector.json",
+      "method": "GET",
+      "path": "/v1/drm",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "drm/bridge-unavailable",
+      "file": "drm/bridge-unavailable.json",
+      "method": "GET",
+      "path": "/v1/drm",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "drm/no-connectors",
+      "file": "drm/no-connectors.json",
+      "method": "GET",
+      "path": "/v1/drm",
+      "status": 200,
+      "error": null
+    },
+    {
+      "case": "drm/unauthorized",
+      "file": "drm/unauthorized.json",
+      "method": "GET",
+      "path": "/v1/drm",
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
       "case": "display-order-set/saved-for-next-session",
       "file": "display-order-set/saved-for-next-session.json",
       "method": "POST",

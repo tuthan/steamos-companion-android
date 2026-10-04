@@ -18,6 +18,7 @@ enum class ApiRoute(
     STATUS(HttpMethod.GET, "/v1/status", true),
     DISPLAY_OUTPUTS(HttpMethod.GET, "/v1/display/outputs", true),
     DISPLAY_ORDER(HttpMethod.GET, "/v1/display/order", true),
+    DRM(HttpMethod.GET, "/v1/drm", true),
     OPERATION(HttpMethod.GET, "/v1/operations/{id}", true),
     POWER(HttpMethod.POST, "/v1/power", true),
     DISPLAY_ORDER_SET(HttpMethod.POST, "/v1/display/order", true),
@@ -43,6 +44,7 @@ enum class ApiRoute(
                 method == HttpMethod.GET && path == STATUS.path -> STATUS
                 method == HttpMethod.GET && path == DISPLAY_OUTPUTS.path -> DISPLAY_OUTPUTS
                 method == HttpMethod.GET && path == DISPLAY_ORDER.path -> DISPLAY_ORDER
+                method == HttpMethod.GET && path == DRM.path -> DRM
                 method == HttpMethod.GET && path.startsWith("/v1/operations/") -> OPERATION
                 method == HttpMethod.POST && path == POWER.path -> POWER
                 method == HttpMethod.POST && path == DISPLAY_ORDER_SET.path -> DISPLAY_ORDER_SET
@@ -316,6 +318,8 @@ sealed interface VersionedPayload {
         val preview: DisplayPreviewSummary? = null,
     ) : VersionedPayload
     data class DisplayOrder(val snapshot: DisplayOrderSummary, val body: JsonValue.ObjectValue) : VersionedPayload
+    /** Advisory DRM link facts; [facts] is null when the host sends nothing usable. Never persisted. */
+    data class Drm(val facts: LinkFacts?) : VersionedPayload
     data class Operation(val operation: OperationSummary) : VersionedPayload
     data class Mutation(
         val operation: OperationSummary?,

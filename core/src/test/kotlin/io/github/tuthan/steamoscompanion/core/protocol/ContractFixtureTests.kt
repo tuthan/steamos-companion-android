@@ -67,6 +67,14 @@ class DisplayRecoveryContractTest {
     @Test fun savecurrentVisibleFalse() = ProtocolFixtureAssertions.assertContractFixture("display-save-current/visible-false")
 }
 
+class DrmContractTest {
+    @Test fun ambiguousConnector() = ProtocolFixtureAssertions.assertContractFixture("drm/ambiguous-connector")
+    @Test fun available() = ProtocolFixtureAssertions.assertContractFixture("drm/available")
+    @Test fun bridgeUnavailable() = ProtocolFixtureAssertions.assertContractFixture("drm/bridge-unavailable")
+    @Test fun noConnectors() = ProtocolFixtureAssertions.assertContractFixture("drm/no-connectors")
+    @Test fun unauthorized() = ProtocolFixtureAssertions.assertContractFixture("drm/unauthorized")
+}
+
 class OperationContractTest {
     @Test fun accepted() = ProtocolFixtureAssertions.assertContractFixture("operations/accepted")
     @Test fun displayPreviewObservedReturn() = ProtocolFixtureAssertions.assertContractFixture("operations/display-preview-observed-return")
