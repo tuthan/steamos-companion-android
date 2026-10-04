@@ -12,6 +12,7 @@ import io.github.tuthan.steamoscompanion.core.client.ActiveHost
 import io.github.tuthan.steamoscompanion.core.client.DisplayBlock
 import io.github.tuthan.steamoscompanion.core.client.DisplayDispatchResult
 import io.github.tuthan.steamoscompanion.core.client.DisplaySelection
+import io.github.tuthan.steamoscompanion.core.client.HostAccessPresentation
 import io.github.tuthan.steamoscompanion.core.client.JournalDispatchResult
 import io.github.tuthan.steamoscompanion.core.client.JournalPhase
 import io.github.tuthan.steamoscompanion.core.client.JournalRejectionCode
@@ -132,7 +133,7 @@ fun failure(code: JournalRejectionCode?): String = when (code) {
     JournalRejectionCode.READBACK_NOT_CONFIRMED -> "Could not confirm display recovery from readback"
     JournalRejectionCode.PREVIEW_NOT_FOUND -> "Preview is no longer available"
     JournalRejectionCode.PREVIEW_EXPIRED -> "Preview time ended; checking restoration"
-    JournalRejectionCode.FORBIDDEN -> "Display control permission was rejected"
+    JournalRejectionCode.FORBIDDEN -> HostAccessPresentation.FORBIDDEN_MESSAGE
     JournalRejectionCode.AMBIGUOUS_DISPLAY -> "The host cannot tell two displays apart, so the order can't be changed"
     JournalRejectionCode.ORDER_UNSUPPORTED -> "This host's Gaming Mode setup does not support changing the display order"
     JournalRejectionCode.ORDER_UPDATE_FAILED -> "The host could not update the display order"

@@ -9,7 +9,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import io.github.tuthan.steamoscompanion.android.CompanionRuntime
 import io.github.tuthan.steamoscompanion.core.client.ActiveHost
+import io.github.tuthan.steamoscompanion.core.client.HostAccessPresentation
 import io.github.tuthan.steamoscompanion.core.protocol.ApiRoute
+import io.github.tuthan.steamoscompanion.core.client.JournalEntry
 import io.github.tuthan.steamoscompanion.core.client.JournalUpdateResult
 import io.github.tuthan.steamoscompanion.core.client.PowerVerb
 import io.github.tuthan.steamoscompanion.core.client.ControlBlock
@@ -25,6 +27,10 @@ import io.github.tuthan.steamoscompanion.core.wake.WakeSendResult
 import java.util.concurrent.Executors
 
 data class ActionFeedback(val text: String, val tone: StatusTone, val revision: Long)
+
+/** A power or Sunshine request the host answered with a failure: a 403 `forbidden` is the owner's choice, said plainly. */
+internal fun controlFailure(entry: JournalEntry): String =
+    HostAccessPresentation.refusal(entry) ?: "The host rejected the request"
 
 /** Mutations run off the main thread; their journal and status observation stay separate. */
 class Phase08ActionViewModel(private val runtime: CompanionRuntime) : ViewModel() {
@@ -108,7 +114,7 @@ class Phase08ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         }
         is ControlDispatchResult.Dispatched -> when (val outcome = result) {
             is JournalDispatchResult.Finished -> when (outcome.entry.phase) {
-                JournalPhase.FAILED -> "The host rejected the request" to StatusTone.WARNING
+                JournalPhase.FAILED -> controlFailure(outcome.entry) to StatusTone.WARNING
                 JournalPhase.SUCCEEDED -> "Operation reported complete; checking device state" to StatusTone.GOOD
                 // The host acknowledges a power request and Steam then carries it out; the device may drop off now.
                 JournalPhase.ACCEPTED, JournalPhase.DISPATCHED, JournalPhase.OBSERVED_RETURN ->
