@@ -228,7 +228,8 @@ object ProtocolCodec {
             else -> WireValue.Unknown(sunshineText)
         }
         return VersionedPayload.Status(hostId, bootId, bridge, capabilities, sunshineState, body,
-            selfCheck = HostSelfCheckDecoder.decode(body["self_check"]))
+            selfCheck = HostSelfCheckDecoder.decode(body["self_check"]),
+            credentialScopes = HostCredentialDecoder.decode(body["credential"]))
     }
 
     private fun parseDisplayOutputs(body: JsonValue.ObjectValue): VersionedPayload.DisplayOutputs {

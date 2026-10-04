@@ -310,6 +310,11 @@ sealed interface VersionedPayload {
         val body: JsonValue.ObjectValue,
         /** Optional host self-check; null when the host omits it or sends nothing usable. Never persisted. */
         val selfCheck: HostSelfCheck? = null,
+        /**
+         * The grantable scopes the host says this credential holds now, in host order; null when the host did not say
+         * (an older host), which is not "no access". An empty list is a real answer.
+         */
+        val credentialScopes: List<String>? = null,
     ) : VersionedPayload
     data class DisplayOutputs(
         val available: Boolean,
