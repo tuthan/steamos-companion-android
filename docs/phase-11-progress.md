@@ -302,3 +302,55 @@ Tests: `HostCredentialTest` (core; the vendored status cases, the legacy fixture
 Mutation check (32 mutants, 32 killed, none survived; each by editing the code, running the test classes and restoring the file). Core (14): the decoder allowlist removed, `distinct()` removed, a missing block read as empty, a null report stored as empty, the store not replacing, the equal-list write skip removed, the identity check removed, empty scopes rejected again by `ActiveHost`, the `power.control` gate in `ControlDispatcher`, the `display.control` gate in `DisplayDispatcher`, the 403 journal mapping, the plain-refusal condition, "View only" not requiring `status.read`, and the owner's note dropped. App (18): the `ActionAvailability` Power and Sunshine gates, `actionContext` not reading the pairing's scopes, the Power reason wording, `displayDeniedReason` always allowing, and each Display gate (preview, saved restore, save current, order, Keep, revert) in `DisplayScreen`, the Overview restore, Keep and revert gates, the Access line removed, the Access note dropped, and the Power and Display 403 messages.
 
 **Not verified.** Nothing here has run on a device or an emulator, and no real host reported `credential`: the Decky side is unreleased `main`. The decoder, gates and wording are verified against the vendored fixtures and unit tests only. `PinnedStatusGateway`'s call to `recordReportedScopes` is covered only by the instrumented suite, which was not run (the store behind it is unit-tested). The status refresh after a refusal is the existing feedback effect, not new code, and is not exercised by a test. How the disabled controls and the Keep reason read on a phone is unverified; the Overview and Display screens are rendered only in Robolectric tests.
+
+## Docs-vs-code audit gap closure (2026-10-05)
+
+Android side of the audit of the three clients against the vault docs. JVM and build evidence only: nothing ran on a device, an emulator or a managed device. No dependency, lock or `gradle/verification-metadata.xml` change; `protocol/**` is untouched (`verify-protocol-hashes.py` and `verify-protocol-coverage.py` pass).
+
+**Phase 07, Connection details.** Rename locally (`LocalAliasStore.set`, `DeviceNameInput` applies its 64-character, no-control-character limits while typing), Edit address (`ConnectionRepair.verifyAndUpdateAddress` over the active LAN paths, the stored Wake interface first, then a tunnel; saved only after the device proves the saved host ID and certificate pin) and Find device again (new `ConnectionRepair.findAgain`: scans, keeps only an answer with the saved host ID and pin; the same host ID with another pin is `IdentityChanged` and is never saved; nothing found is `NotFound`). Every outcome says whether the saved address changed (`ConnectionRepairMessages`). Edit and Find run inside `withLocalNetworkAccess`. Revoke versus Forget is two `ChoiceCard`s with nothing preselected and a Danger Continue.
+
+**Phase 04, saved pairing.** `SavedPairingProblem.from(StateLoadResult)`: a damaged file, a missing key or a permanently invalidated key shows **Saved pairing unavailable** with **Reset local pairing** (`resetLocalPairing`, confirmed first, local only); a transient key problem or a failed read shows Try again and never offers to erase; a newer schema is **App version mismatch** with update and reinstall guidance and is never overwritten. The unpaired flow is no longer shown for any of them, no network work runs, and a reset that leaves nothing paired returns to onboarding (`PersistentReload`). Reset reports success only when `StateResetResult.Cleared`.
+
+**Pairing expiry** (`PairingExpiry`, `PairingScreen`): "Expires in 1:57" under the code, rounded down, `text` colour, `amber` for the last ten seconds, frozen at red **Expired**; one tick per second and never announced.
+
+**Android 16 wording.** `API_36_FAILURE_MESSAGE` is now used where the transport classifies the failure: the manual-address probe (`ManualProbeResult.Failed.qualifiedPermission`), an empty discovery scan, Edit address and Find device again, and the status path (`LegacyLocalNetworkFailure` through `StatusPoller` to the overview line). A pin change keeps its own failure.
+
+**Display and power wording.** "Connection lost" notice on a running preview (flows section 9: the device restores the previous mode at its deadline) and "Restoration not confirmed" after the deadline; "Couldn't confirm display recovery" with **Try connection** (one status read, never a second restore) for a failed restore or one still open while the connection is down; "{Action} isn't available on this device" for an unavailable or unverified capability. Power confirmation: Shut down uses `DangerAction`, Suspend and Restart the `gradPrimary` `PrimaryAction`, beside Cancel.
+
+**Scanner.** A camera failure is shown ("Couldn't scan with the camera" plus the reason, polite live region) with Try again; the paste field stays. `QrScanner` interface so the screen can be tested without a camera.
+
+**StepRail, motion, live regions.** `StepRail` in the pairing explainer, with each step's state spoken. Code roll, 380 ms state swap with an 8 dp rise, wake-packet dot, press brightness (`CompanionMotionComponents`), all cuts under reduce motion. Polite live regions on the pairing outcome, scanner failure, rename and repair results, saved-pairing result, preview notice, Wake device response and the control and display results; countdowns never announce.
+
+### Tests
+
+| Area | Tests |
+| --- | --- |
+| Connection details wiring | `ConnectionRepairTest` (findAgain, edit address), `ConnectionEditingTest`, `ConnectionDetailsActionsTest`, `LocalAliasStoreTest` |
+| Saved pairing | `SavedPairingProblemTest` (core), `SavedPairingScreenTest`, `PersistentReloadTest` |
+| Expiry, steps, scanner, discovery | `PairingExpiryTest`, `PairingScreensTest` |
+| API 36 wording | `DiscoveryScannerTest`, `StatusPollerTest`, `PinnedStatusGatewayFailureTest`, `OverviewConnectionStateTest`, `ConnectionEditingTest` |
+| Display and power | `PreviewCardTextTest`, `DisplayRecoveryWiringTest`, `Phase08ScreensTest` (confirm buttons are checked on rendered pixels) |
+| Motion | `CompanionMotionTest` (rendered pixels and layout bounds under a manual clock, reduce motion on and off) |
+| Rules | `ActionAvailabilityTest` (cross-product table, about 240,000 combinations, plus a sweep of every dimension an action does not read), `SiteTokenDiffTest`, `CompanionVisualRulesTest` (R3 and R10 on pixels) |
+
+Mutation checks run once each and reverted: a hidden dependency added to `CHECK_OPERATION` fails `ActionAvailabilityTest`; a changed `--blue` in a copy of `styles.css` makes `scripts/phase06-token-diff.py` exit 1.
+
+### Verification
+
+- `./gradlew --offline :core:test`: 684 tests (672 before), 0 failures.
+- `./gradlew --offline :app:testBaselineDebugUnitTest :app:testTarget37DebugUnitTest`: 230 tests per flavor (102 before), 0 failures, including the gallery in verify mode (the 20 goldens are unchanged).
+- `./gradlew --offline :app:compileBaselineDebugAndroidTestKotlin :app:compileTarget37DebugAndroidTestKotlin :app:assembleBaselineDebug :app:assembleTarget37Debug :app:verifyCompanionTokens`: passed. No instrumented test was run or added.
+- `./gradlew --offline check --continue`: passed (3 min 32 s): `:core:test`, the debug unit tests of both flavors, lint, the core boundary and merged-manifest checks, and the token audit.
+- `python3 scripts/phase06-token-diff.py --write-extract` against `../steamos-companion-decky/site/styles.css` (byte-identical to the pin `9c213b3`): 19 colour tokens and 5 gradient stops match except the three documented gradient stops; the build and the tests read only the checked-in extract `app/src/test/fixtures/phase06/site-tokens.json`.
+
+### Open
+
+- **R10 on pixels found 19 text pairs below 4.5:1** (14 in light, 5 in dark; lowest 3.67:1, the wire log's `RECEIVED` in light), all text on the profile's own tint fills: the 14 % badge, 12 % ghost button, 10 % selected row and the step circle. The token pair on the plain page passes; the tinted surface does not. They are pinned as a ratchet in `KnownContrastFindings`, so a new or worse pair fails. Fixing one changes a tint alpha or a text token and re-records the gallery goldens, which is a design decision, not made here.
+- Not done: a Grant permission action for the API 36 wording (Try again exists), Request again on Expired and Rejected, the Overview restructure (Sunshine nav row, "Check device status" row, Wake ordering), app bar blur at 92 %, the onboarding tile collage, the onboarding device frame, the 885-golden renderer, the monochrome set, the motion recording and every item that needs a device.
+- `ScannerScreen` and `DisplayScreen` wiring is tested through fakes and real journal entries; the camera itself, `CompanionActivity` and `reloadPersistentState` beyond `PersistentReload` have no JVM test (the activity needs the Android Keystore).
+
+## Store release review (2026-10-13)
+
+Full record in [`store-release-readiness.md`](store-release-readiness.md); every feature and fix is in [`../CHANGELOG.md`](../CHANGELOG.md). No source file changed. Re-verified on the unchanged tree: both protocol verifiers pass (161 files; 154 cases, 19 routes, 157 fixtures), `check --continue :app:assembleBaselineRelease :app:assembleTarget37Release` passes offline (`:core` 684 tests, `:app` 230 per flavor, no failures or skips, and `CompanionComponentGalleryCaptureTest` passed on this run), `:app:bundleBaselineRelease` builds an unsigned bundle, the bundled native library is 16 KB aligned in all four ABIs, and the baseline manifest requests only `INTERNET`, `ACCESS_NETWORK_STATE`, `CAMERA` and `NEARBY_WIFI_DEVICES`. The unsigned baseline APK is now 2,399,809 bytes, SHA-256 `8f4fc6e0e30bd46c8831a72e10da68099472c5d147cd71967c708f05b2be2e45`, which supersedes every earlier APK hash above.
+
+Open for a store release (the About screen is the only new code among them): the 51 uncommitted paths and missing remote, a signing path and bundle signing step, a deliberate version, reviewer access, a privacy policy, an About screen (specified in the design profile, never built), listing assets and declarations, the title decision, and every device gate above.
