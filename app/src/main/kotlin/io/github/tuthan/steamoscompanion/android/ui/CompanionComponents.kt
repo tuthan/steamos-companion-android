@@ -4,7 +4,9 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -30,8 +33,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
@@ -134,6 +139,10 @@ fun StatusGlyphIcon(glyph: StatusGlyph, tone: StatusTone, modifier: Modifier = M
 /**
  * One fact per line. The headline takes the tone colour and glyph; [detail] is the dim qualifier
  * ("Checked 2 s ago"). The row is not a touch target, so it sizes to its text.
+ *
+ * [live] makes the line a polite live region: TalkBack announces it once when it appears or its text changes. Use it only
+ * for a change the owner is waiting on (a pairing outcome, a final action result, a restoration notice), never for a
+ * countdown or polled fact, which must not announce per tick.
  */
 @Composable
 fun StatusLine(
@@ -142,10 +151,13 @@ fun StatusLine(
     modifier: Modifier = Modifier,
     glyph: StatusGlyph? = null,
     detail: String? = null,
+    live: Boolean = false,
 ) {
     val palette = LocalCompanionPalette.current
     val headline = if (tone == StatusTone.UNKNOWN) palette.text else tone.color(palette)
-    Row(modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+    Row(modifier = modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+            if (live) liveRegion = LiveRegionMode.Polite
+        },
         verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         StatusGlyphIcon(glyph ?: tone.defaultGlyph(), tone, Modifier.padding(top = 1.dp))
         Text(buildAnnotatedString {
@@ -207,12 +219,16 @@ fun ActionRow(
         danger -> palette.red
         else -> palette.blue
     }
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPressBrightness(source)
     Row(
         modifier = modifier.fillMaxWidth()
             .clip(shape)
             .border(1.dp, borderColor, shape)
             .background(fillColor, shape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .then(press)
+            .clickable(interactionSource = source, indication = LocalIndication.current,
+                enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = description
                 if (selected) this.selected = true
@@ -293,10 +309,14 @@ fun PrimaryAction(label: String, modifier: Modifier = Modifier, enabled: Boolean
     val start = if (green) palette.gradGreenStart else palette.gradPrimaryStart
     val end = if (green) palette.gradGreenEnd else palette.gradPrimaryEnd
     val foreground = if (green) palette.gradGreenLabel else palette.white
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPressBrightness(source)
     Box(modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f)
         .clip(shape)
         .brandGradient(start, end, CompanionShapes.ACTION_ROW_DP, highlight = palette.white)
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .then(press)
+        .clickable(interactionSource = source, indication = LocalIndication.current,
+            enabled = enabled, role = Role.Button, onClick = onClick)
         .heightIn(min = CompanionSpacing.MIN_TOUCH_TARGET_DP.dp)
         .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
         ActionLabel(label, icon, foreground, FontWeight.SemiBold)
@@ -309,11 +329,15 @@ fun GhostAction(label: String, modifier: Modifier = Modifier, enabled: Boolean =
     val palette = LocalCompanionPalette.current
     val shape = RoundedCornerShape(CompanionShapes.ACTION_ROW_DP.dp)
     val blue = Color(palette.blue.toInt())
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPressBrightness(source)
     Box(modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f)
         .clip(shape)
         .border(1.dp, blue.copy(alpha = CompanionAlpha.GHOST_BORDER), shape)
         .background(blue.copy(alpha = CompanionAlpha.GHOST_FILL), shape)
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .then(press)
+        .clickable(interactionSource = source, indication = LocalIndication.current,
+            enabled = enabled, role = Role.Button, onClick = onClick)
         .heightIn(min = CompanionSpacing.MIN_TOUCH_TARGET_DP.dp)
         .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
         ActionLabel(label, icon, palette.blue, FontWeight.SemiBold)
@@ -327,11 +351,15 @@ fun DangerAction(label: String, modifier: Modifier = Modifier, enabled: Boolean 
     val palette = LocalCompanionPalette.current
     val shape = RoundedCornerShape(CompanionShapes.ACTION_ROW_DP.dp)
     val red = Color(palette.red.toInt())
+    val source = remember { MutableInteractionSource() }
+    val press = rememberPressBrightness(source)
     Box(modifier = modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f)
         .clip(shape)
         .border(1.dp, red.copy(alpha = CompanionAlpha.DANGER_BORDER), shape)
         .background(red.copy(alpha = CompanionAlpha.DANGER_FILL), shape)
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+        .then(press)
+        .clickable(interactionSource = source, indication = LocalIndication.current,
+            enabled = enabled, role = Role.Button, onClick = onClick)
         .heightIn(min = CompanionSpacing.MIN_TOUCH_TARGET_DP.dp)
         .padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
         ActionLabel(label, icon, palette.red, FontWeight.SemiBold)
@@ -366,6 +394,8 @@ fun InfoCard(title: String, body: String, modifier: Modifier = Modifier, @Drawab
     }
 }
 
+private data class HeaderState(val status: String, val tone: StatusTone, val glyph: StatusGlyph?, val detail: String?)
+
 /** Top of the paired overview: kicker, name in white, endpoint in mono, then the reachability fact. */
 @Composable
 fun DeviceHeader(name: String, endpoint: String, status: String, tone: StatusTone,
@@ -376,12 +406,15 @@ fun DeviceHeader(name: String, endpoint: String, status: String, tone: StatusTon
         if (kicker != null) Kicker(kicker, Modifier.padding(bottom = 4.dp))
         Text(name, style = MaterialTheme.typography.titleMedium, color = Color(palette.heading.toInt()))
         MonoValue(endpoint)
-        StatusLine(status, tone, Modifier.padding(top = 6.dp), glyph = glyph, detail = detail)
+        // A change of headline (Checking, Connected, Out of date, Can't reach) cross-fades; the same headline never moves.
+        StateSwap(HeaderState(status, tone, glyph, detail), Modifier.padding(top = 6.dp)) { state ->
+            StatusLine(state.status, state.tone, glyph = state.glyph, detail = state.detail)
+        }
     }
 }
 
 /** Bold, tabular digits inside a countdown sentence such as "Reverts in 12 seconds". */
-private fun countdownText(text: String, color: Color): AnnotatedString = buildAnnotatedString {
+internal fun countdownText(text: String, color: Color): AnnotatedString = buildAnnotatedString {
     var index = 0
     val digits = Regex("\\d+")
     for (match in digits.findAll(text)) {
@@ -403,7 +436,8 @@ private fun countdownText(text: String, color: Color): AnnotatedString = buildAn
 fun PreviewCard(mode: String, remainingSeconds: Long?, status: String,
                 canRevert: Boolean, canKeep: Boolean, onRevert: () -> Unit, onKeep: () -> Unit,
                 modifier: Modifier = Modifier, deviceName: String? = null, question: String? = null,
-                totalSeconds: Long? = null, revertReason: String? = null, keepReason: String? = null) {
+                totalSeconds: Long? = null, revertReason: String? = null, keepReason: String? = null,
+                notice: String? = null) {
     val palette = LocalCompanionPalette.current
     val shape = RoundedCornerShape(CompanionShapes.DEVICE_FRAME_DP.dp)
     val urgent = remainingSeconds != null && remainingSeconds <= CompanionMotion.PREVIEW_AMBER_LAST_SECONDS
@@ -425,6 +459,8 @@ fun PreviewCard(mode: String, remainingSeconds: Long?, status: String,
             }
             Text(countdownText(status, countdownColor), style = MaterialTheme.typography.bodyLarge,
                 color = countdownColor)
+            // A change the owner must hear once (connection lost, restoration unknown); the countdown above never announces.
+            if (!notice.isNullOrBlank()) StatusLine(notice, StatusTone.WARNING, glyph = StatusGlyph.QUESTION, live = true)
             ActionRow("Revert now", enabled = canRevert,
                 reason = revertReason ?: if (canRevert) null else "Preview ownership is unconfirmed", onClick = onRevert)
             PrimaryAction("Keep and save", enabled = canKeep, green = true, icon = R.drawable.ic_check, onClick = onKeep)

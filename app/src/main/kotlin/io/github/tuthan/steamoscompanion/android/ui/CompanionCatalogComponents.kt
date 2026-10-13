@@ -38,9 +38,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -181,7 +183,14 @@ fun StepRail(steps: List<String>, activeIndex: Int) {
                 else -> StatusTone.UNKNOWN
             }
             val color = Color(tone.color(palette).toInt())
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Word as well as glyph and colour: a step announces whether it is done, current or still ahead.
+            val state = stringResource(when {
+                done -> R.string.ui_step_done
+                active -> R.string.ui_step_current
+                else -> R.string.ui_step_upcoming
+            })
+            Row(Modifier.semantics(mergeDescendants = true) { stateDescription = state },
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(24.dp)
                     .background(color.copy(alpha = CompanionAlpha.BADGE_FILL), CircleShape)
                     .border(1.dp, color.copy(alpha = if (active) 1f else .5f), CircleShape),

@@ -62,6 +62,23 @@ class Phase10ActionViewModel(private val runtime: CompanionRuntime) : ViewModel(
         }
     }
 
+    /** Phase 04: clears the unreadable state and its key. Local only; the other device is never contacted. */
+    fun resetLocalPairing() = execute { resetLocalPairingMessage(runtime.pairingTransactions.resetLocalPairing()) }
+
+    /** Edit address: the new address is saved only after the device proves the saved host ID and certificate pin. */
+    fun editAddress(host: ActiveHost, address: String) = execute {
+        val paths = try { runtime.networkAccess.activeLanPaths() } catch (_: SecurityException) {
+            return@execute "Local network permission required" to StatusTone.WARNING
+        }
+        ConnectionRepairMessages.forResult(
+            runtime.connectionRepair.verifyAndUpdateAddress(host, address, paths, host.wakeTarget.interfaceName))
+    }
+
+    /** Find device again: scan the network and move the address only to an answer with the saved identity. */
+    fun findDeviceAgain(host: ActiveHost) = execute {
+        ConnectionRepairMessages.forResult(runtime.connectionRepair.findAgain(host))
+    }
+
     fun forgetOnThisDevice(host: ActiveHost) = execute {
         when (runtime.connectionRemoval.forgetOnThisDevice(host)) {
             is StateCommitResult.Saved -> "Pairing forgotten on this phone" to StatusTone.GOOD

@@ -6,6 +6,7 @@ import io.github.tuthan.steamoscompanion.core.client.PairedStatusGateway
 import io.github.tuthan.steamoscompanion.core.client.PairedStatusRead
 import io.github.tuthan.steamoscompanion.core.client.StateCommitResult
 import io.github.tuthan.steamoscompanion.core.client.StateLoadResult
+import io.github.tuthan.steamoscompanion.core.ports.LegacyLocalNetworkFailure
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
 import io.github.tuthan.steamoscompanion.core.protocol.ApiReply
@@ -39,6 +40,7 @@ class PinnedStatusGateway(
         if (paths.isEmpty()) throw IOException("No local network")
         var lastFailure: IOException? = null
         var pinFailure: IOException? = null
+        var qualifiedFailure: IOException? = null
         for (path in paths) {
             if (cancellation.isCancelled) throw IOException("Status read cancelled")
             try {
@@ -47,9 +49,10 @@ class PinnedStatusGateway(
                 if (cancellation.isCancelled) throw IOException("Status read cancelled", error)
                 lastFailure = error
                 if (error is PinnedCertificateChanged) pinFailure = error
+                if (error is LegacyLocalNetworkFailure) qualifiedFailure = error
             }
         }
-        throw pinFailure ?: lastFailure ?: IOException("Status read failed")
+        throw pinFailure ?: qualifiedFailure ?: lastFailure ?: IOException("Status read failed")
     }
 
     private fun readOnPath(
@@ -118,8 +121,15 @@ class PinnedStatusGateway(
     }
 
     private fun failure(route: ApiRoute, reason: TransportFailure, diagnostic: String? = null): IOException =
-        if (reason == TransportFailure.PIN) PinnedCertificateChanged("${route.path}: certificate changed; re-pairing is required")
-        else IOException("${route.path}: $reason${diagnostic?.let { " ($it)" }.orEmpty()}")
+        statusReadFailure(route.path, reason, diagnostic)
+}
+
+/** How a transport failure on a status route reaches the screen: a changed pin, the qualified API 36 case, or a plain error. */
+internal fun statusReadFailure(path: String, reason: TransportFailure, diagnostic: String? = null): IOException = when (reason) {
+    TransportFailure.PIN -> PinnedCertificateChanged("$path: certificate changed; re-pairing is required")
+    // The API 36 case that cannot prove the compatibility restriction carries its qualified wording to the screen.
+    TransportFailure.LEGACY_PERMISSION_MAY_BE_REQUIRED -> LegacyLocalNetworkFailure()
+    else -> IOException("$path: $reason${diagnostic?.let { " ($it)" }.orEmpty()}")
 }
 
 class PinnedCertificateChanged(message: String) : IOException(message)

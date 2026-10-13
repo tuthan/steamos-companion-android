@@ -18,12 +18,18 @@ import android.view.Surface
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** What the scanner screen needs from a camera adapter, so a test can stand in for the hardware. */
+interface QrScanner : Closeable {
+    /** Start once after CAMERA is granted; the screen's `SurfaceView` owns [preview]. Failures arrive through `onFailure`. */
+    fun start(preview: Surface)
+}
+
 /** Camera2 capture adapter; the visible scanner screen owns its permission request and preview. */
 class CameraQrScanner(
     context: Context,
     private val onPayload: (String) -> Unit,
     private val onFailure: (String) -> Unit,
-) : Closeable {
+) : QrScanner {
     private val appContext = context.applicationContext
     private val cameras = appContext.getSystemService(CameraManager::class.java)
         ?: throw IllegalStateException("Camera service is unavailable")
@@ -39,7 +45,7 @@ class CameraQrScanner(
     private var lastDecodeNanos = 0L
 
     /** Start once after CAMERA is granted. The SurfaceView/TextureView preview owns [preview]. */
-    @Synchronized fun start(preview: Surface) {
+    @Synchronized override fun start(preview: Surface) {
         check(!closed && !started) { "Scanner has already started or closed" }
         check(appContext.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             "Camera permission is required"

@@ -63,6 +63,8 @@ fun DisplayScreen(
     onSaveOrderAndRestart: (OrderRestartConfirmation) -> Unit,
     onResetOrder: () -> Unit,
     onCheckOperation: () -> Unit,
+    /** Try connection: one fresh status read; never a resend of the restore. */
+    onTryConnection: () -> Unit = {},
     /** Opens the Gaming Mode display order tab, as the overview row does. */
     startOnOrder: Boolean = false,
     /** Advisory DRM link facts; only a reading for this pairing and output topology is ever used. */
@@ -121,18 +123,22 @@ fun DisplayScreen(
     Text(stringResource(if (startOnOrder) R.string.ui_display_order else R.string.ui_display_settings),
         style = MaterialTheme.typography.headlineSmall, color = Color(palette.text.toInt()))
     when (preview) {
-        is PreviewPresentation.Active -> PreviewCard(
-            mode = modeLabel(preview.preview.targetMode),
-            remainingSeconds = preview.remainingSeconds,
-            status = preview.remainingSeconds?.let { "Reverts in $it seconds" } ?: "Checking restoration…",
-            canRevert = preview.revertAvailable && !busy && displayDenied == null,
-            canKeep = preview.keepAvailable && !busy && displayDenied == null,
-            onRevert = onRevert,
-            onKeep = { keepConfirmation = KeepPreviewConfirmation.forPreview(host, preview.preview) },
-            question = stringResource(R.string.ui_preview_question, host.endpoint),
-            revertReason = displayDenied,
-            keepReason = displayDenied,
-        )
+        is PreviewPresentation.Active -> {
+            val card = previewCardState(preview)
+            PreviewCard(
+                mode = modeLabel(preview.preview.targetMode),
+                remainingSeconds = preview.remainingSeconds,
+                status = previewStatusText(card, preview.remainingSeconds),
+                canRevert = preview.revertAvailable && !busy && displayDenied == null,
+                canKeep = preview.keepAvailable && !busy && displayDenied == null,
+                onRevert = onRevert,
+                onKeep = { keepConfirmation = KeepPreviewConfirmation.forPreview(host, preview.preview) },
+                question = stringResource(R.string.ui_preview_question, host.endpoint),
+                revertReason = displayDenied,
+                keepReason = displayDenied,
+                notice = previewNoticeText(card.notice),
+            )
+        }
         is PreviewPresentation.Pending -> StatusLine(stringResource(R.string.ui_result_not_confirmed),
             StatusTone.WARNING, glyph = StatusGlyph.QUESTION, detail = "Check the original operation")
         PreviewPresentation.None -> Unit
@@ -264,12 +270,18 @@ fun DisplayScreen(
                 if (card.observed == DisplayObservation.CONNECTION_LOST) StatusTone.WARNING else StatusTone.UNKNOWN)
             card.failure?.let { StatusLine(failure(it), StatusTone.WARNING,
                 detail = card.summary?.takeIf { _ -> card.phase == JournalPhase.FAILED }) }
+            if (recoveryNotConfirmed(card)) {
+                StatusLine(stringResource(R.string.ui_could_not_confirm_display_recovery), StatusTone.WARNING,
+                    glyph = StatusGlyph.QUESTION, live = true)
+                ActionRow(stringResource(R.string.ui_try_connection), icon = R.drawable.ic_radar,
+                    onClick = onTryConnection)
+            }
             if (card.phase.unresolved && card.blocksLane) ActionRow("Check result", enabled = card.operationId != null,
                 reason = if (card.operationId == null) "No operation ID was returned; review the host" else null,
                 icon = R.drawable.ic_status_question, onClick = onCheckOperation)
         }
     }
-    feedback?.let { StatusLine(it.text, it.tone) }
+    feedback?.let { StatusLine(it.text, it.tone, live = true) }
 
     saveConfirmation?.let { captured ->
         PictureConfirmationDialog(

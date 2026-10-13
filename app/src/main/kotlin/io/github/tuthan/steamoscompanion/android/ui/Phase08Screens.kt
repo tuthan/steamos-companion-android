@@ -2,11 +2,12 @@ package io.github.tuthan.steamoscompanion.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,7 +67,7 @@ fun PowerScreen(host: ActiveHost, name: String, context: ActionContext, state: P
         }
         val allowed = ActionAvailability.forAction(action, context)
         ActionRow(title, secondary = consequence, enabled = allowed.enabled && !busy,
-            reason = if (busy) "Request in progress" else allowed.block?.let(::blockReason),
+            reason = if (busy) "Request in progress" else allowed.block?.let { blockReason(it, title) },
             icon = when (verb) {
                 PowerVerb.SUSPEND -> R.drawable.ic_pause
                 PowerVerb.RESTART -> R.drawable.ic_replay
@@ -75,7 +76,7 @@ fun PowerScreen(host: ActiveHost, name: String, context: ActionContext, state: P
             danger = verb == PowerVerb.SHUTDOWN,
             onClick = { confirmation = PowerConfirmation.forHost(host, verb) })
     }
-    feedback?.let { StatusLine(it.text, it.tone) }
+    feedback?.let { StatusLine(it.text, it.tone, live = true) }
     LaneReviewRow(host, state)
     ControlCard(host, state, status, nowMonotonicNanos,
         include = { it != ControlOperationKind.SUNSHINE_RESTART }, onCheckOperation = onCheckOperation)
@@ -99,15 +100,21 @@ fun PowerScreen(host: ActiveHost, name: String, context: ActionContext, state: P
             dismissButton = { TextButton(onClick = { confirmation = null }, modifier = Modifier.focusRequester(cancelFocus)) {
                 Text(stringResource(R.string.ui_cancel))
             } },
-            confirmButton = { TextButton(onClick = { confirmation = null; onConfirm(pending) },
-                colors = ButtonDefaults.textButtonColors(contentColor = Color((if (pending.verb == PowerVerb.SHUTDOWN)
-                    palette.red else palette.blue).toInt()))) {
-                Text(when (pending.verb) {
+            // Shut down is the one destructive confirmation: DangerAction. Suspend and Restart confirm with the primary
+            // gradient. Intrinsic width keeps the button beside Cancel instead of filling a row of its own.
+            confirmButton = {
+                val label = when (pending.verb) {
                     PowerVerb.SUSPEND -> stringResource(R.string.ui_suspend_device)
                     PowerVerb.RESTART -> stringResource(R.string.ui_restart_device)
                     PowerVerb.SHUTDOWN -> stringResource(R.string.ui_shutdown_device)
-                })
-            } })
+                }
+                val confirm = { confirmation = null; onConfirm(pending) }
+                if (pending.verb == PowerVerb.SHUTDOWN) {
+                    DangerAction(label, modifier = Modifier.width(IntrinsicSize.Max), onClick = confirm)
+                } else {
+                    PrimaryAction(label, modifier = Modifier.width(IntrinsicSize.Max), onClick = confirm)
+                }
+            })
     }
 }
 
@@ -140,6 +147,8 @@ fun WakeScreen(attempt: WakeAttemptState?, configured: Boolean, busy: Boolean,
                     packet.destinations.joinToString { it.hostAddress.orEmpty() } +
                     (if (packet.viaRelay) ". It must re-broadcast the packet on the device's network." else "")
             })
+        // One dot travels the link for 1.15 s when a packet goes out; the line above carries the fact without motion.
+        if (packet !is WakeSendResult.Failed) WakePacketLink(System.identityHashCode(packet))
         target?.mac?.takeIf { it.length == 12 && packet !is WakeSendResult.Failed }?.let { mac ->
             StatusLine("For ${mac.chunked(2).joinToString(":")}", StatusTone.UNKNOWN,
                 detail = target.interfaceName?.takeIf { it.isNotBlank() }?.let { "Device network interface: $it" })
@@ -152,7 +161,7 @@ fun WakeScreen(attempt: WakeAttemptState?, configured: Boolean, busy: Boolean,
             attempt.authenticatedResponse -> StatusTone.GOOD
             attempt.timedOut -> StatusTone.UNKNOWN
             else -> StatusTone.PENDING
-        }, glyph = if (attempt.authenticatedResponse) StatusGlyph.DOT else null)
+        }, glyph = if (attempt.authenticatedResponse) StatusGlyph.DOT else null, live = true)
         StatusLine(if (attempt.steamReady) "Steam ready" else "Steam readiness not confirmed",
             if (attempt.steamReady) StatusTone.GOOD else StatusTone.UNKNOWN)
         if (attempt.timedOut && target?.interfaceName?.startsWith("wl") == true) {
@@ -183,9 +192,10 @@ fun SunshineScreen(state: WireValue<SunshineState>?, context: ActionContext, hos
     StatusLine(label, tone, glyph = glyph)
     val allowed = ActionAvailability.forAction(UiAction.RECOVER_SUNSHINE, context)
     ActionRow(stringResource(R.string.ui_recover_sunshine), enabled = allowed.enabled && !busy,
-        reason = if (busy) "Request in progress" else allowed.block?.let(::blockReason), icon = R.drawable.ic_replay,
+        reason = if (busy) "Request in progress" else allowed.block?.let {
+            blockReason(it, stringResource(R.string.ui_recover_sunshine)) }, icon = R.drawable.ic_replay,
         onClick = onRecover)
-    feedback?.let { StatusLine(it.text, it.tone) }
+    feedback?.let { StatusLine(it.text, it.tone, live = true) }
     LaneReviewRow(host, persisted)
     ControlCard(host, persisted, status, nowMonotonicNanos,
         include = { it == ControlOperationKind.SUNSHINE_RESTART }, onCheckOperation = onCheckOperation)
@@ -210,7 +220,7 @@ private fun ControlCard(host: ActiveHost, state: PersistentState?, status: Statu
     if (restarting) StatusLine("Restarting. Waiting for the device to come back…", StatusTone.PENDING,
         glyph = StatusGlyph.PENDING, detail = "The app keeps checking; nothing is sent again")
     val settled = card.summary?.takeIf { card.phase == io.github.tuthan.steamoscompanion.core.client.JournalPhase.SUCCEEDED }
-    if (settled != null) StatusLine(settled, StatusTone.GOOD, glyph = StatusGlyph.CHECK)
+    if (settled != null) StatusLine(settled, StatusTone.GOOD, glyph = StatusGlyph.CHECK, live = true)
     StatusLine("Observed: ${controlObservationLabel(card.observed)}",
         if (card.observed == ControlObservation.CONNECTION_LOST) StatusTone.WARNING else StatusTone.UNKNOWN)
     if (card.phase.unresolved && card.blocksLane) {
@@ -231,7 +241,9 @@ private fun controlObservationLabel(value: ControlObservation): String = when (v
     ControlObservation.UNPROVEN_PAIRING -> "pairing provenance unproven"
 }
 
-private fun blockReason(block: ActionBlock): String = when (block) {
+/** Why a control is disabled, in the words shown beside it. [action] names the control for the capability wording. */
+@Composable
+internal fun blockReason(block: ActionBlock, action: String): String = when (block) {
     ActionBlock.STATUS_NOT_FRESH -> "Check the latest device status"
     ActionBlock.PREVIEW_ACTIVE, ActionBlock.PREVIEW_OWNED_ELSEWHERE, ActionBlock.PREVIEW_STATE_UNKNOWN ->
         "Check the display preview first"
@@ -239,7 +251,8 @@ private fun blockReason(block: ActionBlock): String = when (block) {
     ActionBlock.MISSING_POWER_PERMISSION -> HostAccessPresentation.denied(HostScopes.POWER_CONTROL)
     ActionBlock.MISSING_DISPLAY_PERMISSION -> HostAccessPresentation.denied(HostScopes.DISPLAY_CONTROL)
     ActionBlock.SUNSHINE_NOT_FRESHLY_STOPPED -> "Sunshine is not confirmed stopped"
-    ActionBlock.CAPABILITY_UNAVAILABLE, ActionBlock.CAPABILITY_UNVERIFIED -> "Host capability unavailable"
+    ActionBlock.CAPABILITY_UNAVAILABLE, ActionBlock.CAPABILITY_UNVERIFIED ->
+        stringResource(R.string.ui_action_not_available, action)
     ActionBlock.DEVICE_IDENTITY_CHANGED, ActionBlock.DEVICE_CREDENTIAL_REJECTED -> "Check device identity"
     else -> "Action unavailable in the current device state"
 }

@@ -53,6 +53,7 @@ import androidx.lifecycle.ViewModelProvider
 import io.github.tuthan.steamoscompanion.R
 import io.github.tuthan.steamoscompanion.android.CompanionApplication
 import io.github.tuthan.steamoscompanion.android.CompanionRuntime
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPolicy
 import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPrompt
 import io.github.tuthan.steamoscompanion.core.pairing.PairingAction
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
@@ -62,6 +63,7 @@ import io.github.tuthan.steamoscompanion.core.client.HostHealthPresentation
 import io.github.tuthan.steamoscompanion.core.client.DisplayRecoveryPresentation
 import io.github.tuthan.steamoscompanion.core.client.PendingDisplayResult
 import io.github.tuthan.steamoscompanion.core.client.PersistentState
+import io.github.tuthan.steamoscompanion.core.client.SavedPairingProblem
 import io.github.tuthan.steamoscompanion.core.client.OperationLanePresentation
 import io.github.tuthan.steamoscompanion.core.client.OrderRestartConfirmation
 import io.github.tuthan.steamoscompanion.core.client.DisplayOrderPresentation
@@ -89,6 +91,10 @@ class CompanionActivity : ComponentActivity() {
     private lateinit var navigation: CompanionNavigationViewModel
     private var host by mutableStateOf<ActiveHost?>(null)
     private var persisted by mutableStateOf<PersistentState?>(null)
+    /** Non-null while the encrypted state cannot be opened; it replaces the unpaired flow (Phase 04). */
+    private var savedPairingProblem by mutableStateOf<SavedPairingProblem?>(null)
+    /** Bumped when a local alias changes, because the alias store is not observable. */
+    private var aliasRevision by mutableStateOf(0)
     private var status by mutableStateOf(StatusPollState())
     private var wake by mutableStateOf<WakeAttemptState?>(null)
     private var pairedSession: PairedGraphSession? = null
@@ -138,7 +144,9 @@ class CompanionActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val loaded = runtime.stateRepository.load() as? StateLoadResult.Ready
+        val load = runtime.stateRepository.load()
+        val loaded = load as? StateLoadResult.Ready
+        savedPairingProblem = SavedPairingProblem.from(load)
         persisted = loaded?.state
         host = loaded?.state?.activeHost
         navigation = ViewModelProvider(this, SavedStateViewModelFactory(application, this))
@@ -226,7 +234,17 @@ class CompanionActivity : ComponentActivity() {
                 androidx.compose.runtime.CompositionLocalProvider(
                     LocalAcknowledgeUnresolved provides { host?.let(phase08::acknowledgeUnresolved) },
                 ) {
+                val deviceName = aliasRevision.let { host?.let { current ->
+                    runtime.aliasStore.get(persisted?.activeHost ?: current) ?: current.endpoint } }
                 CompanionRoot(route.destination, host, persisted, status, wake, runtime,
+                    deviceName = deviceName,
+                    savedPairingProblem = savedPairingProblem,
+                    onRetrySavedPairing = ::reloadPersistentState,
+                    onResetLocalPairing = { phase10.resetLocalPairing() },
+                    onRename = { text -> renameLocally(text) },
+                    onEditAddress = { address -> host?.let { current ->
+                        withLocalNetworkAccess { phase10.editAddress(current, address) } } },
+                    onFindAgain = { host?.let { current -> withLocalNetworkAccess { phase10.findDeviceAgain(current) } } },
                     busy = phase08.busy, feedback = phase08.feedback,
                     displayBusy = displayActions.busy, displayFeedback = displayActions.feedback,
                     linkFacts = linkFacts.reading,
@@ -309,15 +327,24 @@ class CompanionActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /** Stores the alias for the selected pairing; true when it was saved. The alias never leaves this phone. */
+    private fun renameLocally(text: String): Boolean {
+        val current = host ?: return false
+        val saved = runCatching { runtime.aliasStore.set(current, DeviceNameInput.alias(text)) }.isSuccess
+        if (saved) aliasRevision++
+        return saved
+    }
+
     private fun reloadPersistentState() {
-        val state = (runtime.stateRepository.load() as? StateLoadResult.Ready)?.state
+        val load = runtime.stateRepository.load()
+        val state = (load as? StateLoadResult.Ready)?.state
+        val hadProblem = savedPairingProblem != null
+        savedPairingProblem = SavedPairingProblem.from(load)
         persisted = state
         val current = host
         val next = state?.activeHost
-        if (current == next) return
-        val sameCredential = current != null && next != null &&
-            StatusObservationSource.from(current) == StatusObservationSource.from(next)
-        if (!sameCredential) {
+        val decision = PersistentReload.decide(hadProblem, savedPairingProblem != null, current, next)
+        if (decision.restartSession) {
             pairedSession?.close()
             pairedSession = next?.let(::createPairedSession)
             status = StatusPollState()
@@ -325,9 +352,13 @@ class CompanionActivity : ComponentActivity() {
             hostJournal.clear()
             wake = null
             if (foreground) pairedSession?.onStart()
-            if (next == null) navigation.unpaired() else navigation.paired()
         }
-        host = next
+        when (decision.navigation) {
+            PersistentReload.Navigation.UNPAIRED -> navigation.unpaired()
+            PersistentReload.Navigation.PAIRED -> navigation.paired()
+            PersistentReload.Navigation.NONE -> Unit
+        }
+        if (current != next) host = next
     }
 
     private fun createPairedSession(pairedHost: ActiveHost) = PairedGraphSession(this, pairedHost, runtime,
@@ -362,6 +393,13 @@ private fun CompanionRoot(
     status: StatusPollState,
     wake: WakeAttemptState?,
     runtime: CompanionRuntime,
+    deviceName: String?,
+    savedPairingProblem: SavedPairingProblem?,
+    onRetrySavedPairing: () -> Unit,
+    onResetLocalPairing: () -> Unit,
+    onRename: (String) -> Boolean,
+    onEditAddress: (String) -> Unit,
+    onFindAgain: () -> Unit,
     busy: Boolean,
     feedback: ActionFeedback?,
     displayBusy: Boolean,
@@ -406,8 +444,8 @@ private fun CompanionRoot(
     onRequestCamera: () -> Unit,
 ) {
     val palette = LocalCompanionPalette.current
-    val onboarding = destination == UiDestination.ONBOARDING ||
-        (destination == UiDestination.REMOTE_OVERVIEW && host == null)
+    val onboarding = savedPairingProblem == null && (destination == UiDestination.ONBOARDING ||
+        (destination == UiDestination.REMOTE_OVERVIEW && host == null))
     // The onboarding backdrop is the hero navy; every other destination sits on the plain body colour.
     val backdrop = if (onboarding) Modifier.background(Color(palette.bg.toInt()))
         .background(Brush.verticalGradient(0f to Color(palette.navy.toInt()), .75f to Color(palette.bg.toInt())))
@@ -415,7 +453,7 @@ private fun CompanionRoot(
     Column(Modifier.fillMaxSize().then(backdrop)) {
         if (!onboarding) {
             CompanionAppBar(stringResource(R.string.app_name),
-                onBack = if (destination == UiDestination.REMOTE_OVERVIEW) null else onBack)
+                onBack = if (destination == UiDestination.REMOTE_OVERVIEW || savedPairingProblem != null) null else onBack)
         }
         val contentInsets = if (onboarding) WindowInsets.safeDrawing
             else WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
@@ -424,7 +462,11 @@ private fun CompanionRoot(
             .verticalScroll(rememberScrollState())
             .padding(CompanionSpacing.SCREEN_GUTTER_DP.dp),
             verticalArrangement = Arrangement.spacedBy(CompanionSpacing.ROW_GROUP_DP.dp)) {
-            when (destination) {
+            if (savedPairingProblem != null) {
+                // No network work and no new pairing while the saved one cannot be opened.
+                SavedPairingUnavailableScreen(savedPairingProblem, phase10Busy, phase10Feedback,
+                    onRetry = onRetrySavedPairing, onReset = onResetLocalPairing)
+            } else when (destination) {
                 UiDestination.ONBOARDING -> OnboardingScreen(onNavigate, permissionMessage)
                 UiDestination.DISCOVERY -> DiscoveryScreen(pairingFlow, onDiscoveryRefresh,
                     onCancel = pairingFlow::cancelScan,
@@ -435,13 +477,13 @@ private fun CompanionRoot(
                 UiDestination.CANDIDATE_DETAILS -> CandidateDetailsScreen(pairingFlow.selected,
                     pairingFlow.busy, onRequestPairing)
                 UiDestination.PAIRING -> PairingScreen(pairingFlow.pairing, pairingFlow.busy,
-                    onPairingCancel, onPairingCheck)
-                UiDestination.SCANNER -> ScannerScreen(cameraGranted, onRequestCamera, onPayload,
-                    onFailure = { /* Scanner failure remains local; user can paste or retry. */ })
+                    onPairingCancel, onPairingCheck, nowMillis = runtime.clock::wallTimeMillis)
+                // The screen shows a camera failure itself, with Try again and the paste fallback.
+                UiDestination.SCANNER -> ScannerScreen(cameraGranted, onRequestCamera, onPayload)
                 UiDestination.REMOTE_OVERVIEW -> {
                     if (host == null) OnboardingScreen(onNavigate, permissionMessage)
                     else OverviewScreen(persisted?.activeHost ?: host, persisted, status,
-                        runtime.aliasStore.get(persisted?.activeHost ?: host) ?: host.endpoint,
+                        deviceName ?: host.endpoint,
                         runtime.clock.monotonicNanos(), displayBusy, onNavigate, onRestore, onRevert, onKeep,
                         onCheckStatus, onCheckOperation)
                 }
@@ -449,10 +491,11 @@ private fun CompanionRoot(
                     persisted?.activeHost ?: host, persisted, status, runtime.clock.monotonicNanos(),
                     displayBusy, displayFeedback, onPreview, onRestore, onRevert, onKeep, onSaveCurrent,
                     onSaveOrder, onSaveOrderAndRestart, onResetOrder, onCheckOperation,
+                    onTryConnection = onCheckStatus,
                     startOnOrder = destination == UiDestination.DISPLAY_ORDER,
                     linkFacts = linkFacts, onLinkFactsWanted = onLinkFactsWanted)
                 UiDestination.POWER -> if (host != null) PowerScreen(host,
-                    runtime.aliasStore.get(host) ?: host.endpoint, actionContext(host, persisted, status),
+                    deviceName ?: host.endpoint, actionContext(host, persisted, status),
                     persisted, status, runtime.clock.monotonicNanos(), busy, feedback,
                     onPowerConfirm, onCheckOperation)
                 UiDestination.WAKE -> if (host != null) WakeScreen(wake, host.wakeTarget.available, busy, onWake, host.wakeTarget)
@@ -461,9 +504,10 @@ private fun CompanionRoot(
                     host, persisted, status, runtime.clock.monotonicNanos(), busy, feedback,
                     onSunshine, onCheckOperation)
                 UiDestination.CONNECTION_DETAILS -> if (host != null) ConnectionDetailsScreen(
-                    persisted?.activeHost ?: host, runtime.aliasStore.get(host) ?: host.endpoint,
+                    persisted?.activeHost ?: host, deviceName ?: host.endpoint,
                     persisted, status, phase10Busy, phase10Feedback, onPairAnother,
                     onConfirmReplacement, onDiscardReplacement, onRevoke, onForget, onExport,
+                    onRename = onRename, onEditAddress = onEditAddress, onFindAgain = onFindAgain,
                     hostHealth = HostHealthPresentation.project(persisted?.activeHost ?: host, status,
                         runtime.clock.wallTimeMillis()),
                     wakeRelay = runtime.wakeRelayStore.get(host)?.format().orEmpty(),
@@ -574,22 +618,30 @@ internal fun OverviewScreen(host: ActiveHost, persisted: PersistentState?, statu
     val headlineParts = headline.split(" · ", limit = 2)
     DeviceHeader(name, host.endpoint, headlineParts[0], tone, kicker = stringResource(R.string.ui_remote_device),
         glyph = glyph, detail = headlineParts.getOrNull(1))
+    // API 36 without the nearby grant: a timeout cannot prove the compatibility restriction, so say what may be needed.
+    if (status.qualifiedLocalNetworkFailure) {
+        StatusLine(LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE, StatusTone.WARNING, glyph = StatusGlyph.INFO)
+    }
     val recovery = persisted?.let {
         DisplayRecoveryPresentation.project(host, it, status, nowMonotonicNanos)
     } ?: PreviewPresentation.None
     val displayDenied = displayDeniedReason(host)
     when (recovery) {
-        is PreviewPresentation.Active -> PreviewCard(
-            mode = "${recovery.preview.targetMode.width} × ${recovery.preview.targetMode.height}",
-            remainingSeconds = recovery.remainingSeconds,
-            status = recovery.remainingSeconds?.let { "Reverts in $it seconds" } ?: "Checking restoration…",
-            canRevert = recovery.revertAvailable && !busy && displayDenied == null,
-            canKeep = recovery.keepAvailable && !busy && displayDenied == null,
-            onRevert = onRevert,
-            onKeep = { keepConfirmation = KeepPreviewConfirmation.forPreview(host, recovery.preview) },
-            deviceName = name,
-            question = stringResource(R.string.ui_preview_question, name),
-            revertReason = displayDenied, keepReason = displayDenied)
+        is PreviewPresentation.Active -> {
+            val card = previewCardState(recovery)
+            PreviewCard(
+                mode = "${recovery.preview.targetMode.width} × ${recovery.preview.targetMode.height}",
+                remainingSeconds = recovery.remainingSeconds,
+                status = previewStatusText(card, recovery.remainingSeconds),
+                canRevert = recovery.revertAvailable && !busy && displayDenied == null,
+                canKeep = recovery.keepAvailable && !busy && displayDenied == null,
+                onRevert = onRevert,
+                onKeep = { keepConfirmation = KeepPreviewConfirmation.forPreview(host, recovery.preview) },
+                deviceName = name,
+                question = stringResource(R.string.ui_preview_question, name),
+                revertReason = displayDenied, keepReason = displayDenied,
+                notice = previewNoticeText(card.notice))
+        }
         is PreviewPresentation.Pending -> {
             StatusLine(stringResource(R.string.ui_result_not_confirmed), StatusTone.WARNING,
                 glyph = StatusGlyph.QUESTION, detail = "Check the device")

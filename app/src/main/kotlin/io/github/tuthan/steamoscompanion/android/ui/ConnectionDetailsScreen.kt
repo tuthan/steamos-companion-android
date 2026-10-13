@@ -2,7 +2,10 @@ package io.github.tuthan.steamoscompanion.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -14,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -49,6 +54,12 @@ fun ConnectionDetailsScreen(
     onRevoke: () -> Unit,
     onForget: () -> Unit,
     onExport: () -> Unit,
+    /** Saves a local alias for this pairing; blank clears it. True when it was stored. Never sent to the device. */
+    onRename: (String) -> Boolean = { false },
+    /** Edit address: verifies `host:port` against the saved host ID and certificate pin before saving it. */
+    onEditAddress: (String) -> Unit = {},
+    /** Find device again: searches the network for the saved host ID and pin and moves the address on a match. */
+    onFindAgain: () -> Unit = {},
     wakeRelay: String = "",
     suggestedWakeRelay: String = "",
     onSaveWakeRelay: (String) -> Boolean = { false },
@@ -63,6 +74,11 @@ fun ConnectionDetailsScreen(
     var replacementIntent by remember(StatusObservationSource.from(host)) { mutableStateOf<ReplacementIntent?>(null) }
     var discardGeneration by remember(StatusObservationSource.from(host)) { mutableStateOf<Long?>(null) }
     var removalChoice by remember(StatusObservationSource.from(host)) { mutableStateOf<RemovalChoice?>(null) }
+    var renaming by remember(StatusObservationSource.from(host)) { mutableStateOf(false) }
+    var editingAddress by remember(StatusObservationSource.from(host)) { mutableStateOf(false) }
+    var renameResult by remember(StatusObservationSource.from(host)) { mutableStateOf<Boolean?>(null) }
+    // The result of a repair action reads next to the rows that ran it; a removal result stays under its own row.
+    var repairFeedbackShown by remember(StatusObservationSource.from(host)) { mutableStateOf(false) }
     // Read when this screen opens for this pairing, never from the status poll and never on a timer.
     LaunchedEffect(StatusObservationSource.from(host)) { onHostJournalWanted(host) }
     Kicker("Paired device")
@@ -84,6 +100,22 @@ fun ConnectionDetailsScreen(
         FactTable { FactRow("Wake target", host.wakeTarget.interfaceName ?: "Configured", divider = false) }
         WakeRelayEditor(StatusObservationSource.from(host), wakeRelay, suggestedWakeRelay, busy, onSaveWakeRelay)
     }
+
+    Kicker("Connection", Modifier.padding(top = 8.dp))
+    ActionRow(stringResource(R.string.ui_rename_locally), enabled = !busy,
+        secondary = stringResource(R.string.ui_rename_locally_detail),
+        onClick = { renameResult = null; renaming = true })
+    renameResult?.let { saved ->
+        StatusLine(stringResource(if (saved) R.string.ui_rename_saved else R.string.ui_rename_failed),
+            if (saved) StatusTone.GOOD else StatusTone.WARNING, live = true)
+    }
+    ActionRow(stringResource(R.string.ui_find_device_again), enabled = !busy, icon = R.drawable.ic_radar,
+        secondary = stringResource(R.string.ui_find_device_again_detail),
+        onClick = { repairFeedbackShown = true; onFindAgain() })
+    ActionRow(stringResource(R.string.ui_edit_address), enabled = !busy,
+        secondary = stringResource(R.string.ui_edit_address_detail),
+        onClick = { editingAddress = true })
+    if (repairFeedbackShown) feedback?.let { StatusLine(it.text, it.tone, live = true) }
 
     val candidate = state?.candidate?.takeIf { it.phase == CandidatePhase.APPROVED_STAGED }
     if (candidate != null) {
@@ -108,9 +140,13 @@ fun ConnectionDetailsScreen(
     HostJournalSection(hostJournal?.forHost(host)) { onHostJournalWanted(host) }
     ActionRow(stringResource(R.string.ui_remove_pairing), enabled = !busy, icon = R.drawable.ic_key,
         secondary = "Revoke on the device or forget here", danger = true, navigates = true,
-        onClick = { removalChoice = RemovalChoice.REVOKE })
-    feedback?.let { StatusLine(it.text, it.tone) }
+        onClick = { repairFeedbackShown = false; removalChoice = RemovalChoice.REVOKE })
+    if (!repairFeedbackShown) feedback?.let { StatusLine(it.text, it.tone, live = true) }
 
+    if (renaming) RenameDialog(initial = name.takeUnless { it == host.endpoint }.orEmpty(), onDismiss = { renaming = false },
+        onSave = { text -> renaming = false; renameResult = onRename(text) })
+    if (editingAddress) EditAddressDialog(current = host.endpoint, onDismiss = { editingAddress = false },
+        onCheck = { authority -> editingAddress = false; repairFeedbackShown = true; onEditAddress(authority) })
     replacementIntent?.let { intent ->
         PictureConfirmationDialog(
             title = "Replace ${intent.oldHost.endpoint}?",
@@ -196,23 +232,84 @@ private fun ReplacementCard(candidate: PairingCandidate, busy: Boolean,
     ActionRow("Keep current device and discard new pairing", enabled = !busy, onClick = onDiscard)
 }
 
+/** The Remove this pairing choice as two radio cards (the design profile's `ChoiceCard`); nothing is chosen for the owner. */
 @Composable
 private fun RemovalChoiceDialog(onCancel: () -> Unit, onRevoke: () -> Unit, onForget: () -> Unit) {
     val palette = LocalCompanionPalette.current
+    var chosen by remember { mutableStateOf<RemovalChoice?>(null) }
+    val cancelFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { cancelFocus.requestFocus() }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onCancel,
+        shape = RoundedCornerShape(CompanionShapes.CARD_DP.dp),
         containerColor = Color(palette.panel.toInt()),
-        title = { Text("Remove this pairing") },
+        title = { Text(stringResource(R.string.ui_remove_pairing)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ActionRow("Remove access on the host", secondary = "Ask the host to revoke this phone",
-                    onClick = onRevoke)
-                ActionRow("Forget on this phone only", secondary = "Host removal will not be confirmed",
-                    onClick = onForget)
+                ChoiceCard(stringResource(R.string.ui_remove_choice_revoke),
+                    stringResource(R.string.ui_remove_choice_revoke_detail),
+                    selected = chosen == RemovalChoice.REVOKE, onClick = { chosen = RemovalChoice.REVOKE })
+                ChoiceCard(stringResource(R.string.ui_remove_choice_forget),
+                    stringResource(R.string.ui_remove_choice_forget_detail),
+                    selected = chosen == RemovalChoice.FORGET, onClick = { chosen = RemovalChoice.FORGET })
             }
         },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onCancel) {
-            Text(stringResource(R.string.ui_cancel))
-        } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onCancel,
+            modifier = Modifier.focusRequester(cancelFocus)) { Text(stringResource(R.string.ui_cancel)) } },
+        confirmButton = {
+            DangerAction(stringResource(R.string.ui_remove_choice_continue), enabled = chosen != null,
+                modifier = Modifier.width(IntrinsicSize.Max),
+                onClick = { if (chosen == RemovalChoice.REVOKE) onRevoke() else if (chosen == RemovalChoice.FORGET) onForget() })
+        },
+    )
+}
+
+/** Rename locally: an alias stored on this phone only. Typing cannot produce a name the store would refuse. */
+@Composable
+private fun RenameDialog(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    val palette = LocalCompanionPalette.current
+    var text by remember { mutableStateOf(DeviceNameInput.sanitize(initial)) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(CompanionShapes.CARD_DP.dp),
+        containerColor = Color(palette.panel.toInt()),
+        title = { Text(stringResource(R.string.ui_rename_locally)) },
+        text = {
+            OutlinedTextField(text, onValueChange = { text = DeviceNameInput.sanitize(it) },
+                label = { Text(stringResource(R.string.ui_rename_device_label)) },
+                supportingText = { Text(stringResource(R.string.ui_rename_device_hint)) },
+                singleLine = true, modifier = Modifier.fillMaxWidth())
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { onSave(text) }) { Text(stringResource(R.string.ui_save)) } },
+    )
+}
+
+/** Edit address: the new address is only a candidate until the device proves the saved identity (checked off screen). */
+@Composable
+private fun EditAddressDialog(current: String, onDismiss: () -> Unit, onCheck: (String) -> Unit) {
+    val palette = LocalCompanionPalette.current
+    var draft by remember { mutableStateOf(AddressDraft.from(current)) }
+    val authority = draft.authority
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(CompanionShapes.CARD_DP.dp),
+        containerColor = Color(palette.panel.toInt()),
+        title = { Text(stringResource(R.string.ui_edit_address)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(draft.host, onValueChange = { draft = draft.withHost(it) },
+                    label = { Text(stringResource(R.string.ui_manual_host_label)) }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(draft.port, onValueChange = { draft = draft.withPort(it) },
+                    label = { Text(stringResource(R.string.ui_manual_port_label)) }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.ui_edit_address_detail), style = MaterialTheme.typography.bodyMedium,
+                    color = Color(palette.textDim.toInt()))
+            }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_cancel)) } },
+        confirmButton = { androidx.compose.material3.TextButton(enabled = authority != null && authority != current,
+            onClick = { authority?.let(onCheck) }) { Text(stringResource(R.string.ui_edit_address_check_save)) } },
     )
 }

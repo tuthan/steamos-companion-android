@@ -1,0 +1,110 @@
+{
+  "source": "site/styles.css in the Decky repository, read-only",
+  "deckyPin": "9c213b31cdce36e67784355be21e2fc1b2b7570f",
+  "stylesSha256": "e0f550b71b4fea64c45b5885ab54963fd785b0f718f862fa3f13c9167c634203",
+  "stylesLastChangedIn": "f27edac56125f815249ee0cbe8a2afd3976e3c3b",
+  "stylesIdenticalToPin": true,
+  "documentedDivergences": {
+    "gradPrimaryStart": "app stop #3579AB, not the site's #67C1F5: white label needs 4.7:1 at the light stop (R10)",
+    "gradPrimaryEnd": "app stop #254F6E, not the site's #417A9B (R10)",
+    "gradGreenEnd": "app stop #7FA82A, not the site's #5C7E10: the dark label needs 5.4:1 at the dark stop (R10)"
+  },
+  "tokens": {
+    "bg": {
+      "site": "0xFF1B2838",
+      "from": "--bg"
+    },
+    "bgDeep": {
+      "site": "0xFF171A21",
+      "from": "--bg-deep"
+    },
+    "panel": {
+      "site": "0xFF16202D",
+      "from": "--panel"
+    },
+    "panel2": {
+      "site": "0xFF1C2B3B",
+      "from": "--panel-2"
+    },
+    "line": {
+      "site": "0x14FFFFFF",
+      "from": "--line"
+    },
+    "lineStrong": {
+      "site": "0x26FFFFFF",
+      "from": "--line-strong"
+    },
+    "text": {
+      "site": "0xFFC6D4DF",
+      "from": "--text"
+    },
+    "textSoft": {
+      "site": "0xFFDFE6EC",
+      "from": "--text-soft"
+    },
+    "textDim": {
+      "site": "0xFF8F98A0",
+      "from": "--text-dim"
+    },
+    "blue": {
+      "site": "0xFF66C0F4",
+      "from": "--blue"
+    },
+    "blueBright": {
+      "site": "0xFF1A9FFF",
+      "from": "--blue-bright"
+    },
+    "blueDeep": {
+      "site": "0xFF417A9B",
+      "from": "--blue-deep"
+    },
+    "green": {
+      "site": "0xFFA1CD44",
+      "from": "--green"
+    },
+    "red": {
+      "site": "0xFFE57373",
+      "from": "--red"
+    },
+    "amber": {
+      "site": "0xFFFFB321",
+      "from": "--amber"
+    },
+    "field": {
+      "site": "0xFF1B2531",
+      "from": ".q-btn { background }"
+    },
+    "slab": {
+      "site": "0xFF0F1822",
+      "from": ".wire { background }"
+    },
+    "mono": {
+      "site": "0xFF9FD3F5",
+      "from": ".q-mono { color }"
+    },
+    "navy": {
+      "site": "0xFF0D2C5E",
+      "from": ".hero { background }"
+    },
+    "gradPrimaryStart": {
+      "site": "0xFF67C1F5",
+      "from": "--grad-btn stop 0"
+    },
+    "gradPrimaryEnd": {
+      "site": "0xFF417A9B",
+      "from": "--grad-btn stop 1"
+    },
+    "gradGreenStart": {
+      "site": "0xFFA1CD44",
+      "from": "--grad-green stop 0"
+    },
+    "gradGreenEnd": {
+      "site": "0xFF5C7E10",
+      "from": "--grad-green stop 1"
+    },
+    "gradProgressStart": {
+      "site": "0xFF67C1F5",
+      "from": "--grad-btn stop 0"
+    }
+  }
+}

@@ -11,6 +11,7 @@ import io.github.tuthan.steamoscompanion.android.CompanionRuntime
 import io.github.tuthan.steamoscompanion.core.discovery.DiscoveryScanResult
 import io.github.tuthan.steamoscompanion.core.discovery.ManualProbeResult
 import io.github.tuthan.steamoscompanion.core.pairing.PairingAction
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPolicy
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
@@ -74,7 +75,7 @@ class PairingFlowViewModel(private val runtime: CompanionRuntime) : ViewModel() 
                 busy = false
                 when (result) {
                     is ManualProbeResult.Candidate -> selected = result.value
-                    else -> message = "No SteamOS Companion server responded at this address"
+                    else -> message = manualProbeMessage(result)
                 }
             }
         }
@@ -193,4 +194,11 @@ class PairingFlowViewModel(private val runtime: CompanionRuntime) : ViewModel() 
         const val POLL_INTERVAL_MS = 2_000L
         const val MAX_POLL_WAIT_MS = 30_000L
     }
+}
+
+/** What a manual address check that found nothing says; the API 36 case that cannot prove the restriction says so. */
+internal fun manualProbeMessage(result: ManualProbeResult): String? = when {
+    result is ManualProbeResult.Candidate -> null
+    result is ManualProbeResult.Failed && result.qualifiedPermission -> LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE
+    else -> "No SteamOS Companion server responded at this address"
 }
