@@ -66,7 +66,7 @@ Code: `main` at `7ac43e4` plus an uncommitted tree dated 2026-10-05 (23 modified
 - Two flavors on compileSdk 37: `baseline` (target 36, the release candidate) and `target37` (permission test configuration). Release variants are R8-shrunk and **unsigned**.
 - Vendored Decky protocol re-pinned seven times in `0ca0ba2`..`a0ba034`, now at `0219c27`; byte-identity and coverage verifiers pass (161 files, 154 cases, 19 routes, 157 fixtures). [`docs/protocol-coverage.md`](docs/protocol-coverage.md).
 - Dependency dispositions in [`docs/build-decision.md`](docs/build-decision.md); locks and SHA-256 verification committed. No analytics, advertising, crash-reporting or billing library is present.
-- CI workflow exists but the repository has no remote, so it has never run.
+- CI runs on GitHub (`tuthan/steamos-companion-android`, public). The first run on 2026-10-13 failed twice for reasons found only on a cold cache: four buildscript-classpath checksums were missing from `gradle/verification-metadata.xml` (`691a3e7`), and the operation-review tests dropped their own calls on a slow runner (`f7c67f6`). The third run is green (`jvm`, 9 min 26 s). Warm-cache offline builds hid both.
 
 ## Known issues and unverified claims
 
