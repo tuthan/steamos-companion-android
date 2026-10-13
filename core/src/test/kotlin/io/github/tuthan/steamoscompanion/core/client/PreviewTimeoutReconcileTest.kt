@@ -78,14 +78,18 @@ class PreviewTimeoutReconcileTest {
             review.start()
             awaitGets(gets, 1)
             var now = 10_000_000_000L
-            review.reviewEndedPreviews(now)
-            awaitGets(gets, 2)
+            offer(gets, 2) { review.reviewEndedPreviews(now) }
             // Inside the interval nothing is sent.
             review.reviewEndedPreviews(now + 1_000_000_000L)
             Thread.sleep(200)
             assertEquals(2, gets.get())
             // Six bounded attempts, then it stops asking.
-            repeat(12) { now += 5_000_000_000L; review.reviewEndedPreviews(now); Thread.sleep(150) }
+            var tries = 0
+            while (gets.get() < 1 + 6 && tries++ < 400) {
+                now += 5_000_000_000L; review.reviewEndedPreviews(now); Thread.sleep(30)
+            }
+            assertEquals(1 + 6, gets.get())
+            repeat(6) { now += 5_000_000_000L; review.reviewEndedPreviews(now); Thread.sleep(150) }
             assertEquals(1 + 6, gets.get())
         }
     }
@@ -102,7 +106,17 @@ class PreviewTimeoutReconcileTest {
     }
 
     private fun awaitGets(gets: AtomicInteger, expected: Int) {
-        repeat(50) { if (gets.get() >= expected) return; Thread.sleep(50) }
+        repeat(200) { if (gets.get() >= expected) return; Thread.sleep(50) }
+        assertEquals(expected, gets.get())
+    }
+
+    /**
+     * The review drops a call while its previous sweep is still running, and a sweep outlives the
+     * lookup that [awaitGets] waits for. Offer the same instant again until a request is made; once
+     * one is, the interval throttles every repeat, so this cannot send twice.
+     */
+    private fun offer(gets: AtomicInteger, expected: Int, call: () -> Unit) {
+        repeat(100) { call(); if (gets.get() >= expected) return; Thread.sleep(50) }
         assertEquals(expected, gets.get())
     }
 

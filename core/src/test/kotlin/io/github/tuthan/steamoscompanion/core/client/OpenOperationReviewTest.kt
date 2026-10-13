@@ -55,9 +55,10 @@ class OpenOperationReviewTest {
             review.start()
             awaitGets(gets, 1) // the start sweep
             var now = 10_000_000_000L
-            review.reviewOpenOperations(now)
-            awaitGets(gets, 2)
-            Thread.sleep(200)
+            offer(gets, 2) { review.reviewOpenOperations(now) }
+            awaitTrue("the settled entry stops blocking the lane") {
+                !OperationLanePresentation.hasUnresolved(host, (repository.load() as StateLoadResult.Ready).state)
+            }
             assertFalse(OperationLanePresentation.hasUnresolved(host, (repository.load() as StateLoadResult.Ready).state))
             assertEquals(JournalPhase.SUCCEEDED,
                 (repository.load() as StateLoadResult.Ready).state.journal.single { it.localGeneration == entry.localGeneration }.phase)
@@ -80,12 +81,17 @@ class OpenOperationReviewTest {
             review.start()
             awaitGets(gets, 1)
             var now = 10_000_000_000L
-            review.reviewOpenOperations(now)
-            awaitGets(gets, 2)
+            offer(gets, 2) { review.reviewOpenOperations(now) }
             review.reviewOpenOperations(now + 1_000_000_000L) // inside the interval
             Thread.sleep(200)
             assertEquals(2, gets.get())
-            repeat(40) { now += 5_000_000_000L; review.reviewOpenOperations(now); Thread.sleep(60) }
+            // Twenty bounded attempts after the start sweep, then it stops asking.
+            var tries = 0
+            while (gets.get() < 1 + 20 && tries++ < 800) {
+                now += 5_000_000_000L; review.reviewOpenOperations(now); Thread.sleep(30)
+            }
+            assertEquals(1 + 20, gets.get())
+            repeat(10) { now += 5_000_000_000L; review.reviewOpenOperations(now); Thread.sleep(80) }
             assertEquals(1 + 20, gets.get())
         }
     }
@@ -124,7 +130,22 @@ class OpenOperationReviewTest {
     }
 
     private fun awaitGets(gets: AtomicInteger, expected: Int) {
-        repeat(60) { if (gets.get() >= expected) return; Thread.sleep(50) }
+        repeat(200) { if (gets.get() >= expected) return; Thread.sleep(50) }
         assertEquals(expected, gets.get())
+    }
+
+    /**
+     * The review drops a call while its previous sweep is still running, and a sweep outlives the
+     * lookup that [awaitGets] waits for. Offer the same instant again until a request is made; once
+     * one is, the interval throttles every repeat, so this cannot send twice.
+     */
+    private fun offer(gets: AtomicInteger, expected: Int, call: () -> Unit) {
+        repeat(100) { call(); if (gets.get() >= expected) return; Thread.sleep(50) }
+        assertEquals(expected, gets.get())
+    }
+
+    private fun awaitTrue(what: String, condition: () -> Boolean) {
+        repeat(100) { if (condition()) return; Thread.sleep(50) }
+        assertTrue(what, condition())
     }
 }
