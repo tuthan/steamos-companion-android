@@ -22,6 +22,12 @@ data class LocalNetworkUserActionPlan(
     val qualifiedFailureMessage: String? = null,
 )
 
+/**
+ * A request failed in the API 36 case whose compatibility restriction cannot be proven from a timeout or `EPERM`. The
+ * message is the qualified wording itself, so a status read that fails this way carries it to the screen unchanged.
+ */
+class LegacyLocalNetworkFailure : java.io.IOException(LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE)
+
 /** Pure target/runtime policy shared by the Android adapter and its matrix tests. */
 object LocalNetworkPermissionPolicy {
     const val API_36 = 36

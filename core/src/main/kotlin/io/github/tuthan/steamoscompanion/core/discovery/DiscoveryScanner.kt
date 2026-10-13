@@ -2,12 +2,14 @@ package io.github.tuthan.steamoscompanion.core.discovery
 
 import io.github.tuthan.steamoscompanion.core.ports.Ipv4Subnet
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPolicy
 import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.protocol.HostEndpoint
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.DiscoveryProbeResult
 import io.github.tuthan.steamoscompanion.core.transport.PinnedHttpTransport
+import io.github.tuthan.steamoscompanion.core.transport.TransportFailure
 import io.github.tuthan.steamoscompanion.core.transport.TransportTarget
 import io.github.tuthan.steamoscompanion.core.transport.UnverifiedDiscoveryCandidate
 import java.io.Closeable
@@ -60,7 +62,11 @@ data class DiscoveryScanResult(
 sealed interface ManualProbeResult {
     data class Candidate(val value: UnverifiedDiscoveryCandidate) : ManualProbeResult
     data class Rejected(val status: Int, val error: String) : ManualProbeResult
-    data class Failed(val reason: String) : ManualProbeResult
+    /**
+     * [qualifiedPermission] is true when the failure is the API 36 case that cannot prove the compatibility restriction:
+     * [reason] is then the qualified explanation, not a transport label.
+     */
+    data class Failed(val reason: String, val qualifiedPermission: Boolean = false) : ManualProbeResult
 }
 
 /**
@@ -199,7 +205,10 @@ class DiscoveryScanner(
                 is DiscoveryProbeResult.Candidate -> ManualProbeResult.Candidate(result.value)
                 is DiscoveryProbeResult.Rejected -> ManualProbeResult.Rejected(result.status, result.error)
                 is DiscoveryProbeResult.UnsupportedVersion -> ManualProbeResult.Failed("Host protocol ${result.version} is not supported")
-                is DiscoveryProbeResult.Failed -> ManualProbeResult.Failed(result.failure.name.lowercase().replace('_', ' '))
+                is DiscoveryProbeResult.Failed ->
+                    if (result.failure == TransportFailure.LEGACY_PERMISSION_MAY_BE_REQUIRED) {
+                        ManualProbeResult.Failed(LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE, qualifiedPermission = true)
+                    } else ManualProbeResult.Failed(result.failure.name.lowercase().replace('_', ' '))
             }
         } catch (_: Exception) {
             ManualProbeResult.Failed("connection failed")

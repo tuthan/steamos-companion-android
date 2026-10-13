@@ -2,6 +2,7 @@ package io.github.tuthan.steamoscompanion.core.discovery
 
 import io.github.tuthan.steamoscompanion.core.ports.Ipv4Subnet
 import io.github.tuthan.steamoscompanion.core.ports.LanPath
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPolicy
 import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionState
 import io.github.tuthan.steamoscompanion.core.ports.NetworkAccess
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
@@ -191,6 +192,23 @@ class DiscoveryScannerTest {
         } finally {
             scanner.close()
         }
+    }
+
+    @Test
+    fun manualProbeNamesTheQualifiedApi36FailureOnlyWhenTheTransportClassifiedIt() {
+        val path = path("wifi", "192.168.1.5", 24)
+        fun failure(kind: TransportFailure): ManualProbeResult {
+            val scanner = DiscoveryScanner(networkAccess(path), DiscoveryProbe { _, _ -> DiscoveryProbeResult.Failed(kind) })
+            return try { scanner.probeManual("deck.local:18443", path) } finally { scanner.close() }
+        }
+
+        val qualified = failure(TransportFailure.LEGACY_PERMISSION_MAY_BE_REQUIRED) as ManualProbeResult.Failed
+        assertEquals(LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE, qualified.reason)
+        assertTrue(qualified.qualifiedPermission)
+
+        val ordinary = failure(TransportFailure.CONNECT) as ManualProbeResult.Failed
+        assertEquals("connect", ordinary.reason)
+        assertFalse(ordinary.qualifiedPermission)
     }
 
     @Test

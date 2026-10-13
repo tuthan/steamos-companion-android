@@ -1,5 +1,7 @@
 package io.github.tuthan.steamoscompanion.core.client
 
+import io.github.tuthan.steamoscompanion.core.ports.LegacyLocalNetworkFailure
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPolicy
 import io.github.tuthan.steamoscompanion.core.protocol.JsonValue
 import io.github.tuthan.steamoscompanion.core.protocol.SteamBridgeState
 import io.github.tuthan.steamoscompanion.core.protocol.SunshineState
@@ -83,6 +85,28 @@ class StatusPollerTest {
             poller.stop()
             assertFalse(poller.state.reading)
         } finally { poller.close() }
+    }
+
+    @Test fun onlyTheApi36QualifiedFailureCarriesTheQualifiedExplanation() {
+        for ((failure, qualified) in listOf<Pair<Exception, Boolean>>(
+            LegacyLocalNetworkFailure() to true,
+            java.io.IOException("/v1/status: CONNECT") to false,
+            IllegalStateException(LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE.take(10)) to false,
+        )) {
+            val failed = CountDownLatch(1)
+            val poller = StatusPoller(host, PairedStatusGateway { _, _ -> throw failure }, System::nanoTime) { state ->
+                if (state.unreachable) failed.countDown()
+            }
+            try {
+                poller.start()
+                assertTrue(failed.await(2, TimeUnit.SECONDS))
+                assertEquals(failure.toString(), qualified, poller.state.qualifiedLocalNetworkFailure)
+                assertEquals(StatusHeadline.UNREACHABLE, poller.state.headline)
+            } finally { poller.close() }
+        }
+        assertEquals("Local connection failed; nearby-device permission may be required",
+            LegacyLocalNetworkFailure().message)
+        assertFalse(StatusPollState().qualifiedLocalNetworkFailure)
     }
 
     private fun await(timeoutMs: Long, condition: () -> Boolean): Boolean {

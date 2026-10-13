@@ -1,5 +1,6 @@
 package io.github.tuthan.steamoscompanion.core.client
 
+import io.github.tuthan.steamoscompanion.core.ports.LocalNetworkPermissionPolicy
 import io.github.tuthan.steamoscompanion.core.protocol.VersionedPayload
 import io.github.tuthan.steamoscompanion.core.transport.CancellationSignal
 import io.github.tuthan.steamoscompanion.core.transport.ResponseTiming
@@ -68,6 +69,13 @@ data class StatusPollState(
         stale -> StatusHeadline.STALE
         else -> StatusHeadline.CONNECTED
     }
+
+    /**
+     * The last read failed in the API 36 case that cannot prove the compatibility restriction. The screen then says
+     * the qualified wording instead of a bare "can't reach"; every other failure keeps the ordinary unreachable state.
+     */
+    val qualifiedLocalNetworkFailure: Boolean get() =
+        unreachable && error == LocalNetworkPermissionPolicy.API_36_FAILURE_MESSAGE
 }
 
 enum class StatusHeadline { CHECKING, CONNECTED, STALE, UNREACHABLE }
